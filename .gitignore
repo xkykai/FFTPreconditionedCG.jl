@@ -72,6 +72,7 @@ statprof
 *.slurm
 
 /Data
+/Output
 /batch_scripts
 /logs
 /latex
