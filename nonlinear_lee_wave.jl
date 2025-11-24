@@ -55,8 +55,17 @@ const Lz = 8
 const Nx = 2048
 const Nz = 2048
 
+advection = WENO(order=9)
+# advection = Centered()
+
+if advection isa WENO
+    advection_str = "WENO"
+else
+    advection_str = "Centered"
+end
+
 k_str = k == π ? "pi" : string(k)
-FILE_DIR = "./Data/nonlinear_lee_wave_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+FILE_DIR = "./Data/nonlinear_lee_wave_$(advection_str)_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 mkpath(FILE_DIR)
 
 grid = RectilinearGrid(GPU(), Float64,
@@ -100,7 +109,7 @@ vw_forcings = MultipleForcings(vw_top_sponge, vw_right_sponge)
 b_forcings = MultipleForcings(b_top_sponge, b_right_sponge)
 
 model = NonhydrostaticModel(; grid, pressure_solver,
-                              advection = Centered(),
+                              advection = advection,
                               tracers = :b,
                               buoyancy = BuoyancyTracer(),
                               forcing = (u=u_forcings, v=vw_forcings, w=vw_forcings, b=b_forcings))
@@ -138,8 +147,8 @@ function progress(sim)
         pressure_iters = 0
     end
 
-    msg = @sprintf("Iter: %d, time: %6.3e, Δt: %6.3e, Poisson iters: %d",
-                    iteration(sim), time(sim), sim.Δt, pressure_iters)
+    msg = @sprintf("Iter: %d, time: %s, Δt: %s, Poisson iters: %d",
+                    iteration(sim), prettytime(sim), prettytime(sim.Δt), pressure_iters)
 
     compute_flow_divergence!(d, sim.model)
 
@@ -164,9 +173,54 @@ model_outputs = (; u, v, w, b, d, pNHS = model.pressures.pNHS)
 
 simulation.output_writers[:jld2] = JLD2Writer(model, model_outputs;
                                                           filename = "$(FILE_DIR)/instantaneous_fields.jld2",
-                                                          schedule = TimeInterval(1),
+                                                          schedule = TimeInterval(0.25),
                                                           with_halos = true,
                                                           overwrite_existing = true)
 
 run!(simulation)
+#%%
+u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u", backend=OnDisk())
+v_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "v", backend=OnDisk())
+w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w", backend=OnDisk())
+b_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "b", backend=OnDisk())
+p_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "pNHS", backend=OnDisk())
+d_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "d", backend=OnDisk())
+#%%
+Nt = length(u_data.times)
+times = u_data.times
+
+fig = Figure(size=(1000, 1500))
+
+n = Observable(1)
+
+btitlestr = @lift @sprintf("Buoyancy at t = %.2f", times[$n])
+utitlestr = @lift @sprintf("Horizontal velocity at t = %.2f", times[$n])
+wtitlestr = @lift @sprintf("Vertical velocity at t = %.2f", times[$n])
+
+axb = Axis(fig[1, 1], title=btitlestr)
+axu = Axis(fig[2, 1], title=utitlestr)
+axw = Axis(fig[3, 1], title=wtitlestr)
+
+bn = @lift interior(b_data[$n], :, 1, :)
+un = @lift interior(u_data[$n], :, 1, :)
+wn = @lift interior(w_data[$n], :, 1, :)
+
+hmb = heatmap!(axb, bn, colormap=:balance)
+hmu = heatmap!(axu, un, colormap=:balance)
+hmw = heatmap!(axw, wn, colormap=:balance)
+
+Colorbar(fig[1, 2], hmb; label="Buoyancy")
+Colorbar(fig[2, 2], hmu; label="u velocity")
+Colorbar(fig[3, 2], hmw; label="w velocity")
+
+CairoMakie.record(fig, "./$(FILE_DIR)/nonlinear_lee_wave.mp4", 1:Nt, framerate=15) do nn
+    n[] = nn
+end
+
+# for nn in 1:Nt
+#     n[] = nn
+#     save("./$(FILE_DIR)/buoyancy_t_$(nn).png", fig)
+# end
+
+
 #%%
