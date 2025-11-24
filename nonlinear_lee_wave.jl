@@ -51,14 +51,14 @@ const Lz = 8
 
 # const Nx = 4096
 # const Nz = 4096
-const Nx = 128
-const Nz = 128
+const Nx = 2048
+const Nz = 2048
 
 k_str = k == π ? "pi" : string(k)
 FILE_DIR = "./Data/nonlinear_lee_wave_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 mkpath(FILE_DIR)
 
-grid = RectilinearGrid(CPU(), Float64,
+grid = RectilinearGrid(GPU(), Float64,
                         size = (Nx, Nz), 
                         halo = (6, 6),
                         x = (-Lx/2, Lx/2),
