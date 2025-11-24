@@ -11,6 +11,7 @@ using Oceananigans.Operators
 using Oceananigans.Architectures: architecture
 using KernelAbstractions: @kernel, @index
 using Statistics
+using CUDA
 
 const k = π
 const N² = 12
