@@ -111,7 +111,7 @@ stop_time = 50
 simulation = Simulation(model; Δt=initial_Δt, stop_time=stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
 
-simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(10))
+simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(100))
 
 u, v, w = model.velocities
 b = model.tracers.b
