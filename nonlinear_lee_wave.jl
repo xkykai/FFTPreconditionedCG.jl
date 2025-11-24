@@ -1,0 +1,171 @@
+using Roots
+using CairoMakie
+using Oceananigans
+using Printf
+using JLD2
+using Oceananigans.Models.NonhydrostaticModels: ConjugateGradientPoissonSolver, FFTBasedPoissonSolver
+using Oceananigans.Grids: with_number_type
+using Oceananigans.Forcings: MultipleForcings
+using Oceananigans.Utils: launch!
+using Oceananigans.Operators
+using Oceananigans.Architectures: architecture
+using KernelAbstractions: @kernel, @index
+using Statistics
+
+const k = π
+const N² = 12
+const U = 1
+const h₀ = 0.5
+const m = sqrt((N²/(U^2)) - k^2)
+
+# topography(h, x) = h₀ * cos(k*x + m*h) - h
+# xs = -4:0.1:4
+# hs = zeros(length(xs))
+
+# for (i, x) in enumerate(xs)
+#     topography(h) = topography(h, x)
+#     if i == 1
+#         h_guess = -h₀
+#     else
+#         h_guess = hs[i-1]
+#     end
+#     hs[i] = find_zero(topography, h_guess)
+#     @info "x = $x, h = $(hs[i])"
+# end
+
+function find_topography(x)
+    topography(h) = h₀ * (cos(k*x + m*h) + 1) - h
+    h_guess = h₀ / 2
+    h = find_zero(topography, h_guess)
+    return h
+end
+
+#%%
+# fig = Figure()
+# ax = Axis(fig[1, 1], xlabel = "x", ylabel = "h(x)", title = "Nonlinear Lee Wave Topography")
+# lines!(ax, xs, hs)
+# display(fig)
+#%%
+const Lx = 8
+const Lz = 8
+
+# const Nx = 4096
+# const Nz = 4096
+const Nx = 128
+const Nz = 128
+
+k_str = k == π ? "pi" : string(k)
+FILE_DIR = "./Data/nonlinear_lee_wave_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+mkpath(FILE_DIR)
+
+grid = RectilinearGrid(CPU(), Float64,
+                        size = (Nx, Nz), 
+                        halo = (6, 6),
+                        x = (-Lx/2, Lx/2),
+                        z = (0, Lz),
+                        topology = (Periodic, Flat, Bounded))
+
+grid = ImmersedBoundaryGrid(grid, GridFittedBottom(find_topography))
+
+# lines(grid.immersed_boundary.bottom_height)
+
+reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
+
+preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
+pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=100; preconditioner)
+
+uᵢ(x, z) = -U * z
+bᵢ(x, z) = N² * z
+
+u_target(x, z, t) = uᵢ(x, z)
+b_target(x, z, t) = bᵢ(x, z)
+
+initial_Δt = (Lx / Nx) / U / 5
+damping_rate = 1 / (initial_Δt * 100)
+
+top_mask(x, z) = exp(-(z - Lz)^2 / (2 * (Lz/5)^2))
+right_mask(x, z) = exp(-(x - Lx/2)^2 / (2 * (Lx/10)^2))
+
+u_top_sponge = Relaxation(rate=damping_rate, mask=top_mask, target=u_target)
+vw_top_sponge = Relaxation(rate=damping_rate, mask=top_mask)
+b_top_sponge = Relaxation(rate=damping_rate, mask=top_mask, target=b_target)
+
+u_right_sponge = Relaxation(rate=damping_rate, mask=right_mask, target=u_target)
+vw_right_sponge = Relaxation(rate=damping_rate, mask=right_mask)
+b_right_sponge = Relaxation(rate=damping_rate, mask=right_mask, target=b_target)
+
+u_forcings = MultipleForcings(u_top_sponge, u_right_sponge)
+vw_forcings = MultipleForcings(vw_top_sponge, vw_right_sponge)
+b_forcings = MultipleForcings(b_top_sponge, b_right_sponge)
+
+model = NonhydrostaticModel(; grid, pressure_solver,
+                              advection = Centered(),
+                              tracers = :b,
+                              buoyancy = BuoyancyTracer(),
+                              forcing = (u=u_forcings, v=vw_forcings, w=vw_forcings, b=b_forcings))
+
+set!(model, u=uᵢ, b=bᵢ)
+
+stop_time = 50
+simulation = Simulation(model; Δt=initial_Δt, stop_time=stop_time)
+time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
+
+simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(10))
+
+u, v, w = model.velocities
+b = model.tracers.b
+
+d = CenterField(grid)
+
+@kernel function _divergence!(target_field, u, v, w, grid)
+    i, j, k = @index(Global, NTuple)
+    @inbounds target_field[i, j, k] = divᶜᶜᶜ(i, j, k, grid, u, v, w)
+end
+
+function compute_flow_divergence!(target_field, model)
+    grid = model.grid
+    u, v, w = model.velocities
+    arch = architecture(grid)
+    launch!(arch, grid, :xyz, _divergence!, target_field, u, v, w, grid)
+    return nothing
+end
+
+function progress(sim)
+    if pressure_solver isa ConjugateGradientPoissonSolver
+        pressure_iters = iteration(pressure_solver)
+    else
+        pressure_iters = 0
+    end
+
+    msg = @sprintf("Iter: %d, time: %6.3e, Δt: %6.3e, Poisson iters: %d",
+                    iteration(sim), time(sim), sim.Δt, pressure_iters)
+
+    compute_flow_divergence!(d, sim.model)
+
+    msg *= @sprintf(", max u: %6.3e, max v: %6.3e, max w: %6.3e, max b: %6.3e, max d: %6.3e, max pressure: %6.3e, mean pressure: %6.3e",
+                    maximum(abs, sim.model.velocities.u),
+                    maximum(abs, sim.model.velocities.v),
+                    maximum(abs, sim.model.velocities.w),
+                    maximum(abs, sim.model.tracers.b),
+                    maximum(abs, d),
+                    maximum(abs, sim.model.pressures.pNHS),
+                    mean(sim.model.pressures.pNHS),
+    )
+
+    @info msg
+
+    return nothing
+end
+
+simulation.callbacks[:progress] = Callback(progress, IterationInterval(1))
+
+model_outputs = (; u, v, w, b, d, pNHS = model.pressures.pNHS)
+
+simulation.output_writers[:jld2] = JLD2Writer(model, model_outputs;
+                                                          filename = "$(FILE_DIR)/instantaneous_fields.jld2",
+                                                          schedule = TimeInterval(1),
+                                                          with_halos = true,
+                                                          overwrite_existing = true)
+
+run!(simulation)
+#%%
