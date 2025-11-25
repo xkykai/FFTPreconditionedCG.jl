@@ -65,7 +65,7 @@ else
 end
 
 k_str = k == π ? "pi" : string(k)
-FILE_DIR = "./Data/nonlinear_lee_wave_$(advection_str)_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+FILE_DIR = "./Data/nonlinear_lee_wave_$(advection_str)_norightsponge_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 mkpath(FILE_DIR)
 
 grid = RectilinearGrid(GPU(), Float64,
@@ -100,19 +100,20 @@ u_top_sponge = Relaxation(rate=damping_rate, mask=top_mask, target=u_target)
 vw_top_sponge = Relaxation(rate=damping_rate, mask=top_mask)
 b_top_sponge = Relaxation(rate=damping_rate, mask=top_mask, target=b_target)
 
-u_right_sponge = Relaxation(rate=damping_rate, mask=right_mask, target=u_target)
-vw_right_sponge = Relaxation(rate=damping_rate, mask=right_mask)
-b_right_sponge = Relaxation(rate=damping_rate, mask=right_mask, target=b_target)
+# u_right_sponge = Relaxation(rate=damping_rate, mask=right_mask, target=u_target)
+# vw_right_sponge = Relaxation(rate=damping_rate, mask=right_mask)
+# b_right_sponge = Relaxation(rate=damping_rate, mask=right_mask, target=b_target)
 
-u_forcings = MultipleForcings(u_top_sponge, u_right_sponge)
-vw_forcings = MultipleForcings(vw_top_sponge, vw_right_sponge)
-b_forcings = MultipleForcings(b_top_sponge, b_right_sponge)
+# u_forcings = MultipleForcings(u_top_sponge, u_right_sponge)
+# vw_forcings = MultipleForcings(vw_top_sponge, vw_right_sponge)
+# b_forcings = MultipleForcings(b_top_sponge, b_right_sponge)
 
 model = NonhydrostaticModel(; grid, pressure_solver,
                               advection = advection,
                               tracers = :b,
                               buoyancy = BuoyancyTracer(),
-                              forcing = (u=u_forcings, v=vw_forcings, w=vw_forcings, b=b_forcings))
+                              forcing = (u=u_top_sponge, v=vw_top_sponge, w=vw_top_sponge, b=b_top_sponge))
+                            #   forcing = (u=u_forcings, v=vw_forcings, w=vw_forcings, b=b_forcings))
 
 set!(model, u=uᵢ, b=bᵢ)
 
@@ -205,8 +206,12 @@ bn = @lift interior(b_data[$n], :, 1, :)
 un = @lift interior(u_data[$n], :, 1, :)
 wn = @lift interior(w_data[$n], :, 1, :)
 
-hmb = heatmap!(axb, bn, colormap=:balance)
-hmu = heatmap!(axu, un, colormap=:balance)
+blim = extrema(interior(b_data[Nt]))
+ulim = extrema(interior(u_data[Nt]))
+wlim = (-maximum(abs, interior(w_data[Nt])), maximum(abs, interior(w_data[Nt])))
+
+hmb = heatmap!(axb, bn, colormap=:turbo)
+hmu = heatmap!(axu, un, colormap=:turbo)
 hmw = heatmap!(axw, wn, colormap=:balance)
 
 Colorbar(fig[1, 2], hmb; label="Buoyancy")
