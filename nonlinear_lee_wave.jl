@@ -13,10 +13,10 @@ using KernelAbstractions: @kernel, @index
 using Statistics
 using CUDA
 
-const k = π
-const N² = 12
-const U = 1
-const h₀ = 0.5
+const k = π / 2
+const N² = 0.4
+const U = 0.1
+const h₀ = 0.05
 const m = sqrt((N²/(U^2)) - k^2)
 
 # topography(h, x) = h₀ * cos(k*x + m*h) - h
@@ -91,10 +91,10 @@ u_target(x, z, t) = uᵢ(x, z)
 b_target(x, z, t) = bᵢ(x, z)
 
 initial_Δt = (Lx / Nx) / U / 5
-damping_rate = 1 / (initial_Δt * 100)
+damping_rate = 1 / (initial_Δt * 20)
 
-top_mask(x, z) = exp(-(z - Lz)^2 / (2 * (Lz/5)^2))
-right_mask(x, z) = exp(-(x - Lx/2)^2 / (2 * (Lx/10)^2))
+top_mask(x, z) = exp(-(z - Lz)^2 / (2 * (Lz/10)^2))
+# right_mask(x, z) = exp(-(x - Lx/2)^2 / (2 * (Lx/10)^2))
 
 u_top_sponge = Relaxation(rate=damping_rate, mask=top_mask, target=u_target)
 vw_top_sponge = Relaxation(rate=damping_rate, mask=top_mask)
@@ -210,9 +210,9 @@ blim = extrema(interior(b_data[Nt]))
 ulim = extrema(interior(u_data[Nt]))
 wlim = (-maximum(abs, interior(w_data[Nt])), maximum(abs, interior(w_data[Nt])))
 
-hmb = heatmap!(axb, bn, colormap=:turbo)
-hmu = heatmap!(axu, un, colormap=:turbo)
-hmw = heatmap!(axw, wn, colormap=:balance)
+hmb = heatmap!(axb, bn, colormap=:turbo, colorrange=blim)
+hmu = heatmap!(axu, un, colormap=:turbo, colorrange=ulim)
+hmw = heatmap!(axw, wn, colormap=:balance, colorrange=wlim)
 
 Colorbar(fig[1, 2], hmb; label="Buoyancy")
 Colorbar(fig[2, 2], hmu; label="u velocity")
