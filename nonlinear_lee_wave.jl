@@ -16,7 +16,7 @@ using CUDA
 const k = π / 2
 const N² = 0.4
 const U = 0.1
-const h₀ = 0.05
+const h₀ = 0.1
 const m = sqrt((N²/(U^2)) - k^2)
 
 # topography(h, x) = h₀ * cos(k*x + m*h) - h
