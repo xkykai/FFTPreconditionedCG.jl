@@ -50,10 +50,10 @@ end
 const Lx = 8
 const Lz = 8
 
-# const Nx = 4096
-# const Nz = 4096
-const Nx = 2048
-const Nz = 2048
+const Nx = 4096
+const Nz = 4096
+# const Nx = 2048
+# const Nz = 2048
 
 advection = WENO(order=9)
 # advection = Centered()
@@ -117,7 +117,7 @@ model = NonhydrostaticModel(; grid, pressure_solver,
 
 set!(model, u=uᵢ, b=bᵢ)
 
-stop_time = 50
+stop_time = 100
 simulation = Simulation(model; Δt=initial_Δt, stop_time=stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
 
