@@ -17,7 +17,7 @@ const k = π / 2
 const N² = 0.4
 const U = 0.1
 const h₀ = 0.1
-const m = sqrt((N²/(U^2)) - k^2)
+const m = -sqrt((N²/(U^2)) - k^2)
 
 # topography(h, x) = h₀ * cos(k*x + m*h) - h
 # xs = -4:0.1:4
@@ -65,7 +65,7 @@ else
 end
 
 k_str = k == π ? "pi" : string(k)
-FILE_DIR = "./Data/nonlinear_lee_wave_$(advection_str)_norightsponge_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+FILE_DIR = "./Data/nonlinear_lee_wave_$(advection_str)_k_$(k_str)_m_$(m)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 mkpath(FILE_DIR)
 
 grid = RectilinearGrid(GPU(), Float64,
@@ -75,7 +75,7 @@ grid = RectilinearGrid(GPU(), Float64,
                         z = (0, Lz),
                         topology = (Periodic, Flat, Bounded))
 
-grid = ImmersedBoundaryGrid(grid, GridFittedBottom(find_topography))
+grid = ImmersedBoundaryGrid(grid, PartialCellBottom(find_topography))
 
 # lines(grid.immersed_boundary.bottom_height)
 
@@ -117,7 +117,7 @@ model = NonhydrostaticModel(; grid, pressure_solver,
 
 set!(model, u=uᵢ, b=bᵢ)
 
-stop_time = 100
+stop_time = 200
 simulation = Simulation(model; Δt=initial_Δt, stop_time=stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
 
@@ -190,7 +190,7 @@ d_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "d", backend=O
 Nt = length(u_data.times)
 times = u_data.times
 
-fig = Figure(size=(1000, 1500))
+fig = Figure(size=(2000, 1000))
 
 n = Observable(1)
 
@@ -199,8 +199,8 @@ utitlestr = @lift @sprintf("Horizontal velocity at t = %.2f", times[$n])
 wtitlestr = @lift @sprintf("Vertical velocity at t = %.2f", times[$n])
 
 axb = Axis(fig[1, 1], title=btitlestr)
-axu = Axis(fig[2, 1], title=utitlestr)
-axw = Axis(fig[3, 1], title=wtitlestr)
+axu = Axis(fig[1, 2], title=utitlestr)
+axw = Axis(fig[1, 3], title=wtitlestr)
 
 bn = @lift interior(b_data[$n], :, 1, :)
 un = @lift interior(u_data[$n], :, 1, :)
@@ -208,17 +208,17 @@ wn = @lift interior(w_data[$n], :, 1, :)
 
 blim = extrema(interior(b_data[Nt]))
 ulim = extrema(interior(u_data[Nt]))
-wlim = (-maximum(abs, interior(w_data[Nt])), maximum(abs, interior(w_data[Nt])))
+wlim = (-maximum(abs, interior(w_data[Nt])), maximum(abs, interior(w_data[Nt]))) ./ 2
 
 hmb = heatmap!(axb, bn, colormap=:turbo, colorrange=blim)
 hmu = heatmap!(axu, un, colormap=:turbo, colorrange=ulim)
 hmw = heatmap!(axw, wn, colormap=:balance, colorrange=wlim)
 
-Colorbar(fig[1, 2], hmb; label="Buoyancy")
-Colorbar(fig[2, 2], hmu; label="u velocity")
-Colorbar(fig[3, 2], hmw; label="w velocity")
+Colorbar(fig[2, 1], hmb; label="Buoyancy", vertical=false, flipaxis=false)
+Colorbar(fig[2, 2], hmu; label="u velocity", vertical=false, flipaxis=false)
+Colorbar(fig[2, 3], hmw; label="w velocity", vertical=false, flipaxis=false)
 
-CairoMakie.record(fig, "./$(FILE_DIR)/nonlinear_lee_wave.mp4", 1:Nt, framerate=15) do nn
+CairoMakie.record(fig, "./$(FILE_DIR)/$(FILE_DIR).mp4", 1:Nt, framerate=15) do nn
     n[] = nn
 end
 
