@@ -6,6 +6,7 @@ using Oceananigans.Solvers: DiagonallyDominantPreconditioner, compute_laplacian!
 using Oceananigans.Grids: with_number_type
 using Statistics
 using CUDA
+using NVTX
 # using CairoMakie
 
 function initial_conditions!(model)
@@ -47,8 +48,6 @@ function setup_model(grid, pressure_solver)
     return model
 end
 
-reltol = abstol = 1e-7
-
 function setup_simulation(model, Δt, stop_iteration)
     return Simulation(model, Δt=Δt, stop_iteration=stop_iteration)
 end
@@ -56,7 +55,7 @@ end
 Ns = [32, 64, 96, 128, 256, 512]
 
 Δt = 2e-2 * 64 / 2 / maximum(Ns)
-nsteps = 30
+nsteps = 100
 
 times_FFT = [zeros(nsteps) for _ in Ns]
 
@@ -75,21 +74,15 @@ for (i, N) in enumerate(Ns)
     end
 
     for step in 1:nsteps
-        # NVTX.@range "FFT timestep, N $N" begin
-        #     time_step!(model, Δt)
-        # end
-        times_FFT[i][step] = @elapsed time_step!(model, Δt)
+        NVTX.@range "FFT timestep, N $N" begin
+            time_step!(model, Δt)
+        end
     end
 end
 
-# cg_softwares = ["Oceananigans", "Krylov.jl"]
-cg_softwares = ["Oceananigans"]
 preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
 
-times_cg = [zeros(nsteps) for _ in cg_softwares, _ in preconditioners, _ in Ns]
-Niters_cg = [zeros(Int, nsteps) for _ in cg_softwares, _ in preconditioners, _ in Ns]
-
-for (i, software) in enumerate(cg_softwares), (j, precond_name) in enumerate(preconditioners), (k, N) in enumerate(Ns)
+for precond_name in preconditioners, N in Ns
     @info "Benchmarking N = $(N) $software with $precond_name preconditioner"
     grid = nothing
     model = nothing
@@ -109,12 +102,13 @@ for (i, software) in enumerate(cg_softwares), (j, precond_name) in enumerate(pre
     elseif precond_name == "MITgcm"
         preconditioner = DiagonallyDominantPreconditioner()
     end
-    reltol = abstol = 1e-7
-    if software == "Krylov.jl"
-        pressure_solver = KrylovPoissonSolver(grid; preconditioner, reltol, abstol, maxiter=10000)
-    elseif software == "Oceananigans"
-        pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
-    end
+
+    volume = grid.Δx * grid.Δy * grid.Δz
+
+    reltol = 100 * eps(grid) * volume^2
+    abstol = 100 * eps(grid)
+
+    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
 
     model = setup_model(grid, pressure_solver)
 
@@ -122,54 +116,12 @@ for (i, software) in enumerate(cg_softwares), (j, precond_name) in enumerate(pre
         time_step!(model, Δt)
     end
 
-    # for step in 1:nsteps
-    #     NVTX.@range "$software, $precond_name preconditioner N $N" begin
-    #         time_step!(model, Δt)
-    #     end
-    #     if software == "Krylov.jl"
-    #         @info "PCG iteration (N = $N, $software, $precond_name preconditioner) = $(model.pressure_solver.krylov_solver.workspace.stats.niter)"
-    #         Niters_cg[i, j, k][step] = model.pressure_solver.krylov_solver.workspace.stats.niter
-    #     elseif software == "Oceananigans"
-    #         @info "PCG iteration (N = $N, $software, $precond_name preconditioner) = $(model.pressure_solver.conjugate_gradient_solver.iteration)"
-    #         Niters_cg[i, j, k][step] = model.pressure_solver.conjugate_gradient_solver.iteration
-    #     end
-    # end
-
     for step in 1:nsteps
-        times_cg[i, j, k][step] = @elapsed time_step!(model, Δt)
-        if software == "Krylov.jl"
-            @info "PCG iteration (N = $N, $software, $precond_name preconditioner) = $(model.pressure_solver.krylov_solver.workspace.stats.niter)"
-            Niters_cg[i, j, k][step] = model.pressure_solver.krylov_solver.workspace.stats.niter
-        elseif software == "Oceananigans"
-            @info "PCG iteration (N = $N, $software, $precond_name preconditioner) = $(model.pressure_solver.conjugate_gradient_solver.iteration)"
-            Niters_cg[i, j, k][step] = model.pressure_solver.conjugate_gradient_solver.iteration
-        end
+        NVTX.@range "$(precond_name) preconditioner, N $N" begin
+            time_step!(model, Δt)
+        end        
     end
 end
-
-jldopen("staircase_3D_convection_benchmarking_results_30timesteps_H100_single.jld2", "w") do file
-    file["times_FFT"] = times_FFT
-    file["times_cg"] = times_cg
-    file["Niters_cg"] = Niters_cg
-    file["Ns"] = Ns
-    file["cg_softwares"] = cg_softwares
-    file["preconditioners"] = preconditioners
-    file["nsteps"] = nsteps
-    file["Δt"] = Δt
-end
-
-# #%%
-# times_FFT, times_cg, Niters_cg, Ns, cg_softwares, preconditioners, nsteps, Δt = jldopen("staircase_3D_convection_benchmarking_results_A100.jld2", "r") do file
-#     times_FFT = file["times_FFT"]
-#     times_cg = file["times_cg"]
-#     Niters_cg = file["Niters_cg"]
-#     Ns = file["Ns"]
-#     cg_softwares = file["cg_softwares"]
-#     preconditioners = file["preconditioners"]
-#     nsteps = file["nsteps"]
-#     Δt = file["Δt"]
-#     return times_FFT, times_cg, Niters_cg, Ns, cg_softwares, preconditioners, nsteps, Δt
-# end
 
 # #%%
 # median_times_FFT = median.(times_FFT)
