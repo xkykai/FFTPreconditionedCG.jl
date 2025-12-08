@@ -4,7 +4,7 @@ using Oceananigans
 using Printf
 using JLD2
 using Oceananigans.Models.NonhydrostaticModels: ConjugateGradientPoissonSolver, FFTBasedPoissonSolver
-using Oceananigans.Grids: with_number_type
+using Oceananigans.Grids: with_number_type, xnodes, znodes
 using Oceananigans.Forcings: MultipleForcings
 using Oceananigans.Utils: launch!
 using Oceananigans.Operators
@@ -14,9 +14,10 @@ using Statistics
 using CUDA
 
 const k = π / 2
-const U = 0.01
 const N² = 0.4
 const h₀ = 0.1
+const m = π
+const U = sqrt(N² / (k^2 + m^2))
 
 #%%
 const Lx = 8
@@ -164,6 +165,14 @@ d_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "d", backend=O
 Nt = length(u_data.times)
 times = u_data.times
 
+xC = xnodes(u_data.grid, Center())
+xF = xnodes(u_data.grid, Face())
+zC = znodes(u_data.grid, Center())
+zF = znodes(u_data.grid, Face())
+
+b_background = repeat(bᵢ.(0, zC)', Nx, 1)
+u_background = repeat(uᵢ.(0, zC)', Nx+1, 1)
+
 fig = Figure(size=(2000, 1000))
 
 n = Observable(1)
@@ -176,21 +185,25 @@ axb = Axis(fig[1, 1], title=btitlestr)
 axu = Axis(fig[1, 2], title=utitlestr)
 axw = Axis(fig[1, 3], title=wtitlestr)
 
-bn = @lift interior(b_data[$n], :, 1, :)
-un = @lift interior(u_data[$n], :, 1, :)
+bn = @lift interior(b_data[$n], :, 1, :) .- b_background
+un = @lift interior(u_data[$n], :, 1, :) .- u_background
 wn = @lift interior(w_data[$n], :, 1, :)
 
-blim = extrema(interior(b_data[Nt]))
-ulim = extrema(interior(u_data[Nt]))
+blim = (-maximum(interior(b_data[Nt], :, 1, :) .- b_background),
+        maximum(interior(b_data[Nt], :, 1, :) .- b_background)) ./ 2
+ulim = (-maximum(interior(u_data[Nt], :, 1, :) .- u_background),
+        maximum(interior(u_data[Nt], :, 1, :) .- u_background)) ./ 2
 wlim = (-maximum(abs, interior(w_data[Nt])), maximum(abs, interior(w_data[Nt]))) ./ 2
 
-hmb = heatmap!(axb, bn, colormap=:turbo, colorrange=blim)
-hmu = heatmap!(axu, un, colormap=:turbo, colorrange=ulim)
-hmw = heatmap!(axw, wn, colormap=:balance, colorrange=wlim)
+hmb = heatmap!(axb, xC, zC, bn, colormap=:balance, colorrange=blim)
+hmu = heatmap!(axu, xF, zC, un, colormap=:balance, colorrange=ulim)
+hmw = heatmap!(axw, xC, zF, wn, colormap=:balance, colorrange=wlim)
 
-Colorbar(fig[2, 1], hmb; label="Buoyancy", vertical=false, flipaxis=false)
-Colorbar(fig[2, 2], hmu; label="u velocity", vertical=false, flipaxis=false)
-Colorbar(fig[2, 3], hmw; label="w velocity", vertical=false, flipaxis=false)
+Colorbar(fig[2, 1], hmb; label="Buoyancy anomaly, background = N²z", vertical=false, flipaxis=false)
+Colorbar(fig[2, 2], hmu; label="u anomaly, background = -U", vertical=false, flipaxis=false)
+Colorbar(fig[2, 3], hmw; label="w", vertical=false, flipaxis=false)
+
+Label(fig[0, :], "Linear Lee wave, $(advection_str), k = $(k_str), N² = $(N²), U = $(U), h₀ = $(h₀), Lx = $(Lx), Lz = $(Lz), Nx = $(Nx), Nz = $(Nz)", fontsize=20)
 
 CairoMakie.record(fig, "./$(FILE_DIR)/$(filename).mp4", 1:Nt, framerate=15) do nn
     n[] = nn
