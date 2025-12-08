@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "f343b495f91189d167d40dd5eb648140e2dcd364"
+project_hash = "bd72329db31de6d72d125007da4d1eb88618238f"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -71,6 +71,12 @@ deps = ["Colors"]
 git-tree-sha1 = "e092fa223bf66a3c41f9c022bd074d916dc303e7"
 uuid = "27a7e980-b3e6-11e9-2bcd-0b925532e340"
 version = "0.4.2"
+
+[[deps.ArgParse]]
+deps = ["Logging", "TextWrap"]
+git-tree-sha1 = "22cf435ac22956a7b45b0168abbc871176e7eecc"
+uuid = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+version = "1.2.0"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -466,7 +472,7 @@ uuid = "b22a6f82-2f65-5046-a5b2-351ab43fb4e5"
 version = "7.1.1+0"
 
 [[deps.FFTPreconditionedCG]]
-deps = ["CUDA", "CairoMakie", "GLMakie", "JLD2", "KernelAbstractions", "Oceananigans", "Roots"]
+deps = ["ArgParse", "CUDA", "CairoMakie", "GLMakie", "JLD2", "KernelAbstractions", "NVTX", "Oceananigans", "Roots"]
 path = "."
 uuid = "0952d9b4-2cf0-4724-860a-ae82a6cf6f19"
 version = "1.0.0-DEV"
@@ -1913,6 +1919,11 @@ version = "0.1.1"
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 version = "1.11.0"
+
+[[deps.TextWrap]]
+git-tree-sha1 = "43044b737fa70bc12f6105061d3da38f881a3e3c"
+uuid = "b718987f-49a8-5099-9789-dcd902bef87d"
+version = "1.0.2"
 
 [[deps.TiffImages]]
 deps = ["ColorTypes", "DataStructures", "DocStringExtensions", "FileIO", "FixedPointNumbers", "IndirectArrays", "Inflate", "Mmap", "OffsetArrays", "PkgVersion", "PrecompileTools", "ProgressMeter", "SIMD", "UUIDs"]
