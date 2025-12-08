@@ -4,12 +4,13 @@ using Printf
 using JLD2
 using Oceananigans.Models.NonhydrostaticModels: ConjugateGradientPoissonSolver, FFTBasedPoissonSolver
 using Oceananigans.Models.NonhydrostaticModels: nonhydrostatic_pressure_solver
-using Oceananigans.Solvers: DiagonallyDominantPreconditioner, compute_laplacian!
+using Oceananigans.Solvers: DiagonallyDominantPreconditioner
 using Oceananigans.Grids: with_number_type
 using Oceananigans.DistributedComputations
 using Statistics
 using CUDA
 using NVTX
+using ArgParse
 # using CairoMakie
 
 MPI.Init()
