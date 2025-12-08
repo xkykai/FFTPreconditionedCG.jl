@@ -36,11 +36,12 @@ else
     arch = Distributed(GPU(); partition = Partition(x = DistributedComputations.Equal()), synchronized_communication=false)
 end
 
-N = 480
+Nx = 512 * ngpus
+Ny = Nz = 512
 
 function initial_conditions!(model)
     h = 0.05
-    x₀ = 0.5
+    x₀ = 0
     y₀ = 0.5
     z₀ = 0.55
     bᵢ(x, y, z) = - exp(-((x - x₀)^2 + (y - y₀)^2 + (z - z₀)^2) / 2h^2)
@@ -50,9 +51,9 @@ end
 
 function setup_grid(N)
     grid = RectilinearGrid(arch, Float64,
-                           size = (N, N, N), 
+                           size = (Nx, Ny, Nz), 
                            halo = (6, 6, 6),
-                           x = (0, 1),
+                           x = (-ngpus / 2, ngpus / 2),
                            y = (0, 1),
                            z = (0, 1),
                            topology = (Bounded, Bounded, Bounded))
@@ -144,8 +145,8 @@ for precond_name in preconditioners
     end
 
     if ngpus == 1 || model.architecture.local_rank == 0
-        mkpath("./reports/strongscaling_H100")
-        jldopen("./reports/strongscaling_H100/cg_iters.jld2", "a") do file
+        mkpath("./reports/weakscaling_H100")
+        jldopen("./reports/weakscaling_H100/cg_iters.jld2", "a") do file
             file["$(precond_name)"] = cg_iters
         end
     end
