@@ -100,10 +100,10 @@ preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
 
 for precond_name in preconditioners
     @info "Benchmarking $precond_name preconditioner"
-    grid = nothing
-    model = nothing
-    pressure_solver = nothing
-    preconditioner = nothing
+    global grid = nothing
+    global model = nothing
+    global pressure_solver = nothing
+    global preconditioner = nothing
     GC.gc()
     CUDA.reclaim()
 
