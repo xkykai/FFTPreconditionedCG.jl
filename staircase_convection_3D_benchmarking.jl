@@ -30,8 +30,9 @@ function setup_grid(N)
 
     # slope(x, y) = 1 - (x + y) / 2
     # slope(x, y) = (5 + tanh(40*(x - 1/6)) + tanh(40*(x - 2/6)) + tanh(40*(x - 3/6)) + tanh(40*(x - 4/6)) + tanh(40*(x - 5/6))) / 10 * (0.5y + 0.5)
-    slope(x, y) = (5 + tanh(40*(x - 1/6)) + tanh(40*(x - 2/6)) + tanh(40*(x - 3/6)) + tanh(40*(x - 4/6)) + tanh(40*(x - 5/6))) / 20 + 
-                  (5 + tanh(40*(y - 1/6)) + tanh(40*(y - 2/6)) + tanh(40*(y - 3/6)) + tanh(40*(y - 4/6)) + tanh(40*(y - 5/6))) / 20
+    # slope(x, y) = (5 + tanh(40*(x - 1/6)) + tanh(40*(x - 2/6)) + tanh(40*(x - 3/6)) + tanh(40*(x - 4/6)) + tanh(40*(x - 5/6))) / 20 + 
+    #               (5 + tanh(40*(y - 1/6)) + tanh(40*(y - 2/6)) + tanh(40*(y - 3/6)) + tanh(40*(y - 4/6)) + tanh(40*(y - 5/6))) / 20
+    slope(x, y) = 0.35
 
     grid = ImmersedBoundaryGrid(grid, GridFittedBottom(slope))
     return grid
@@ -103,7 +104,8 @@ for precond_name in preconditioners, N in Ns
         preconditioner = DiagonallyDominantPreconditioner()
     end
 
-    volume = grid.Δx * grid.Δy * grid.Δz
+    volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
+    cg_iters = zeros(nsteps)
 
     reltol = 100 * eps(grid) * volume^2
     abstol = 100 * eps(grid)
@@ -119,7 +121,12 @@ for precond_name in preconditioners, N in Ns
     for step in 1:nsteps
         NVTX.@range "$(precond_name) preconditioner, N $N" begin
             time_step!(model, Δt)
-        end        
+        end
+        cg_iters[step] = model.pressure_solver.conjugate_gradient_solver.iteration        
+    end
+
+    jldopen("./reports/single_H100/cg_iters.jld2", "a") do file
+        file["$(precond_name)_N$(N)"] = cg_iters
     end
 end
 
