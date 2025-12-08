@@ -48,7 +48,7 @@ function initial_conditions!(model)
     set!(model, b=bᵢ)
 end
 
-function setup_grid(N)
+function setup_grid()
     grid = RectilinearGrid(arch, Float64,
                            size = (N, N, N), 
                            halo = (6, 6, 6),
@@ -81,8 +81,8 @@ end
 Δt = 2e-2 * 64 / 2 / N
 nsteps = 100
 
-@info "Benchmarking FFT solver, N = $(N)"
-grid = setup_grid(N)
+@info "Benchmarking FFT solver"
+grid = setup_grid()
 pressure_solver = nothing
 model = setup_model(grid, pressure_solver)
 
@@ -91,7 +91,7 @@ for step in 1:3
 end
 
 for step in 1:nsteps
-    NVTX.@range "FFT timestep, N $N" begin
+    NVTX.@range "FFT timestep" begin
         time_step!(model, Δt)
     end
 end
@@ -107,7 +107,7 @@ for precond_name in preconditioners
     GC.gc()
     CUDA.reclaim()
 
-    grid = setup_grid(N)
+    grid = setup_grid()
     if precond_name == "no"
         preconditioner = nothing
     elseif precond_name == "FFT64"
@@ -134,7 +134,7 @@ for precond_name in preconditioners
     end
 
     for step in 1:nsteps
-        NVTX.@range "$(precond_name) preconditioner, N $N" begin
+        NVTX.@range "$(precond_name) preconditioner" begin
             time_step!(model, Δt)
         end
 
