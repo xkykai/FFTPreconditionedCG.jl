@@ -58,8 +58,6 @@ Ns = [32, 64, 96, 128, 256, 512]
 Δt = 2e-2 * 64 / 2 / maximum(Ns)
 nsteps = 100
 
-times_FFT = [zeros(nsteps) for _ in Ns]
-
 for (i, N) in enumerate(Ns)
     @info "Benchmarking FFT solver, N = $(N)"
     grid = nothing
@@ -84,7 +82,7 @@ end
 preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
 
 for precond_name in preconditioners, N in Ns
-    @info "Benchmarking N = $(N) $software with $precond_name preconditioner"
+    @info "Benchmarking N = $(N) with $precond_name preconditioner"
     grid = nothing
     model = nothing
     pressure_solver = nothing
