@@ -14,9 +14,9 @@ using Statistics
 using CUDA
 
 const k = π / 2
-const N² = 0.4
 const U = 0.1
-const h₀ = 0.1
+const N² = k^2 * U^2
+const h₀ = 0.05
 
 #%%
 const Lx = 8
@@ -37,7 +37,9 @@ else
 end
 
 k_str = k == π ? "pi" : string(k)
-FILE_DIR = "./Data/linear_lee_wave_$(advection_str)_norightsponge_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+
+filename = "linear_lee_wave_$(advection_str)_norightsponge_k_$(k_str)_N2_$(N²)_U_$(U)_h0_$(h₀)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
 
 bottom_topography(x) = h₀ * (cos(k*x) + 1)
@@ -190,7 +192,7 @@ Colorbar(fig[2, 1], hmb; label="Buoyancy", vertical=false, flipaxis=false)
 Colorbar(fig[2, 2], hmu; label="u velocity", vertical=false, flipaxis=false)
 Colorbar(fig[2, 3], hmw; label="w velocity", vertical=false, flipaxis=false)
 
-CairoMakie.record(fig, "./$(FILE_DIR)/$(FILE_DIR).mp4", 1:Nt, framerate=15) do nn
+CairoMakie.record(fig, "./$(FILE_DIR)/$(filename).mp4", 1:Nt, framerate=15) do nn
     n[] = nn
 end
 
