@@ -115,7 +115,7 @@ for precond_name in preconditioners
         preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
     elseif precond_name == "FFT32"
         reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
-        preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid.underlying_grid, nothing)
+        preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
     elseif precond_name == "MITgcm"
         preconditioner = DiagonallyDominantPreconditioner()
     end
