@@ -33,7 +33,7 @@ ngpus = args["ngpus"]
 if MPI.Comm_size(MPI.COMM_WORLD) == 1
     arch = GPU()
 else
-    arch = Distributed(GPU(); partition = Partition(x = DistributedComputations.Equal()), synchronized_communication=false)
+    arch = Distributed(GPU(); partition = Partition(x=ngpus), synchronized_communication=false)
 end
 
 Nx = 512 * ngpus
@@ -80,7 +80,7 @@ function setup_simulation(model, Δt, stop_iteration)
 end
 
 Δt = 2e-2 * 64 / 2 / Nz
-nsteps = 100
+nsteps = 10
 
 @info "Benchmarking FFT solver"
 grid = setup_grid(Nx, Ny, Nz)

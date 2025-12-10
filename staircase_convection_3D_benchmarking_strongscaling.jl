@@ -79,7 +79,7 @@ function setup_simulation(model, Δt, stop_iteration)
 end
 
 Δt = 2e-2 * 64 / 2 / N
-nsteps = 100
+nsteps = 10
 
 @info "Benchmarking FFT solver"
 grid = setup_grid()
