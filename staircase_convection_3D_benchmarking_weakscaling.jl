@@ -33,7 +33,7 @@ ngpus = args["ngpus"]
 if MPI.Comm_size(MPI.COMM_WORLD) == 1
     arch = GPU()
 else
-    arch = Distributed(GPU(); partition = Partition(x=ngpus), synchronized_communication=false)
+    arch = Distributed(GPU(); partition = Partition(y=ngpus), synchronized_communication=false)
 end
 
 Nx = 512 * ngpus
