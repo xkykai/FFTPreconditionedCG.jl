@@ -4,16 +4,17 @@ using Oceananigans
 using Oceananigans.Operators
 using Oceananigans.Units
 using Oceananigans.Solvers
-using Oceananigans.BuoyancyFormulations: buoyancy
 using Oceananigans.Models.NonhydrostaticModels: ConjugateGradientPoissonSolver, FFTBasedPoissonSolver
+using Oceananigans.Models: buoyancy_field
 using Oceananigans.Grids: with_number_type
 using Random
 using CairoMakie
+using CUDA
 
 # ---------------------------------------------------------------------- #
 # Define Parameters
 function setup_grid(Nx, Nz, Lx, Lz)
-    arch = GPU() #better to run on CPU during development
+    arch = GPU()
 
     immersed_grid = begin
         underlying_grid = RectilinearGrid(
@@ -49,8 +50,11 @@ reduced_precision_grid = with_number_type(Float32, immersed_grid.underlying_grid
 # pressure_solver = nothing
 # preconditioner = FFTBasedPoissonSolver(immersed_grid.underlying_grid)
 preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
-reltol = abstol = 1e-7
+reltol = abstol = 1e-7 * 0.5^3^2
 pressure_solver = ConjugateGradientPoissonSolver(immersed_grid, maxiter=100; reltol, abstol, preconditioner)
+
+# advection = WENO(order=5)
+advection = Centered()
 
 function setup_model(grid, pressure_solver)
     diffusivity = 1.0e-5
@@ -59,7 +63,7 @@ function setup_model(grid, pressure_solver)
     closure = ScalarDiffusivity(ν = viscosity, κ = diffusivity)
 
     model = NonhydrostaticModel(; grid,
-                                  advection = WENO(),
+                                  advection,
                                   tracers = (:T, :S),
                                   buoyancy = SeawaterBuoyancy(),
                                   closure,
@@ -127,9 +131,7 @@ function setup_simulation(model)
     T, S = model.tracers
     p = model.pressures.pNHS
     
-    b_op = buoyancy(model)
-    b = Field(b_op)
-    compute!(b)
+    b = buoyancy_field(model)
 
     Tbar = Average(T, dims=(1, 2, 3))
     Sbar = Average(S, dims=(1, 2, 3))
@@ -207,21 +209,21 @@ xC = T_data_fft.grid.underlying_grid.xᶜᵃᵃ[1:Nx]
 zC = T_data_fft.grid.underlying_grid.z.cᵃᵃᶜ[1:Nz]
 
 #%%
-fig = Figure(size=(2000, 1000))
+fig = Figure(size=(2000, 1200))
 axT_fft = Axis(fig[1, 1], xlabel = "x (m)", ylabel = "z (m)", title = "Temperature (FFT solver)")
 axS_fft = Axis(fig[1, 2], xlabel = "x (m)", ylabel = "z (m)", title = "Salinity (FFT solver)")
 axd_fft = Axis(fig[1, 3], xlabel = "x (m)", ylabel = "z (m)", title = "Divergence (FFT solver)")
 axp_fft = Axis(fig[1, 4], xlabel = "x (m)", ylabel = "z (m)", title = "Pressure (FFT solver)")
 axb_fft = Axis(fig[1, 5], xlabel = "x (m)", ylabel = "z (m)", title = "Buoyancy (FFT solver)")
 
-axT_cg = Axis(fig[2, 1], xlabel = "x (m)", ylabel = "z (m)", title = "Temperature (FFT-preconditioned CG solver)")
-axS_cg = Axis(fig[2, 2], xlabel = "x (m)", ylabel = "z (m)", title = "Salinity (FFT-preconditioned CG solver)")
-axd_cg = Axis(fig[2, 3], xlabel = "x (m)", ylabel = "z (m)", title = "Divergence (FFT-preconditioned CG solver)")
-axp_cg = Axis(fig[2, 4], xlabel = "x (m)", ylabel = "z (m)", title = "Pressure (FFT-preconditioned CG solver)")
-axb_cg = Axis(fig[2, 5], xlabel = "x (m)", ylabel = "z (m)", title = "Buoyancy (FFT-preconditioned CG solver)")
+axT_cg = Axis(fig[3, 1], xlabel = "x (m)", ylabel = "z (m)", title = "Temperature (FFT-preconditioned CG solver)")
+axS_cg = Axis(fig[3, 2], xlabel = "x (m)", ylabel = "z (m)", title = "Salinity (FFT-preconditioned CG solver)")
+axd_cg = Axis(fig[3, 3], xlabel = "x (m)", ylabel = "z (m)", title = "Divergence (FFT-preconditioned CG solver)")
+axp_cg = Axis(fig[3, 4], xlabel = "x (m)", ylabel = "z (m)", title = "Pressure (FFT-preconditioned CG solver)")
+axb_cg = Axis(fig[3, 5], xlabel = "x (m)", ylabel = "z (m)", title = "Buoyancy (FFT-preconditioned CG solver)")
 
-axTbar = Axis(fig[4, 1:2], xlabel = "time (days)", ylabel = "T (°C)", title = "Domain-averaged temperature")
-axSbar = Axis(fig[4, 4:5], xlabel = "time (days)", ylabel = "S (psu)", title = "Domain-averaged salinity")
+axTbar = Axis(fig[5, 1:2], xlabel = "time (days)", ylabel = "T (°C)", title = "Domain-averaged temperature")
+axSbar = Axis(fig[5, 4:5], xlabel = "time (days)", ylabel = "S (psu)", title = "Domain-averaged salinity")
 
 n = Observable(Nt)
 
@@ -246,35 +248,47 @@ Sbar_fft = interior(Sbar_data_fft, 1, 1, 1, :)
 timeₙ = @lift [times[$n] / 1days]
 
 timeframe_lim = Nt
-Tlim = (find_min(interior(T_data_fft[timeframe_lim])[interior(T_data_fft[timeframe_lim]) .!= 0]), find_max(interior(T_data_fft[timeframe_lim])[interior(T_data_fft[timeframe_lim]) .!= 0]))
-Slim = (find_min(interior(S_data_fft[timeframe_lim])[interior(S_data_fft[timeframe_lim]) .!= 0]), find_max(interior(S_data_fft[timeframe_lim])[interior(S_data_fft[timeframe_lim]) .!= 0]))
-blim = (find_min(interior(b_data_fft[timeframe_lim])[interior(b_data_fft[timeframe_lim]) .!= 0]), find_max(interior(b_data_fft[timeframe_lim])[interior(b_data_fft[timeframe_lim]) .!= 0]))
-dlim = (-1e-4, 1e-4)
-plim = (-maximum(abs, interior(p_data_cg)), maximum(abs, interior(p_data_cg)))
+Tlim_FFT = (find_min(interior(T_data_fft[timeframe_lim])[interior(T_data_fft[timeframe_lim]) .!= 0]), find_max(interior(T_data_fft[timeframe_lim])[interior(T_data_fft[timeframe_lim]) .!= 0]))
+Slim_FFT = (find_min(interior(S_data_fft[timeframe_lim])[interior(S_data_fft[timeframe_lim]) .!= 0]), find_max(interior(S_data_fft[timeframe_lim])[interior(S_data_fft[timeframe_lim]) .!= 0]))
+blim_FFT = (find_min(interior(b_data_fft[timeframe_lim])[interior(b_data_fft[timeframe_lim]) .!= 0]), find_max(interior(b_data_fft[timeframe_lim])[interior(b_data_fft[timeframe_lim]) .!= 0]))
+dlim_FFT = (-maximum(abs, interior(d_data_fft[timeframe_lim])[interior(d_data_fft[timeframe_lim]) .!= 0]), maximum(abs, interior(d_data_fft[timeframe_lim])[interior(d_data_fft[timeframe_lim]) .!= 0]))
+plim_FFT = (-maximum(abs, interior(p_data_fft)), maximum(abs, interior(p_data_fft))) ./ 4
 
-Tbarlim = (find_min(interior(Tbar_data_fft)) - 1e-5, find_max(interior(Tbar_data_fft)) + 1e-5)
-Sbarlim = (find_min(interior(Sbar_data_fft)) - 1e-5, find_max(interior(Sbar_data_fft)) + 1e-5)
+Tlim_cg = (find_min(interior(T_data_cg[timeframe_lim])[interior(T_data_cg[timeframe_lim]) .!= 0]) - 1e-4, find_max(interior(T_data_cg[timeframe_lim])[interior(T_data_cg[timeframe_lim]) .!= 0]) + 1e-4)
+Slim_cg = (find_min(interior(S_data_cg[timeframe_lim])[interior(S_data_cg[timeframe_lim]) .!= 0]) - 1e-4, find_max(interior(S_data_cg[timeframe_lim])[interior(S_data_cg[timeframe_lim]) .!= 0]) + 1e-4)
+blim_cg = (find_min(interior(b_data_cg[timeframe_lim])[interior(b_data_cg[timeframe_lim]) .!= 0]) - 1e-4, find_max(interior(b_data_cg[timeframe_lim])[interior(b_data_cg[timeframe_lim]) .!= 0]) + 1e-4)
+dlim_cg = (-maximum(abs, interior(d_data_cg[timeframe_lim])[interior(d_data_cg[timeframe_lim]) .!= 0]) - 1e-4, maximum(abs, interior(d_data_cg[timeframe_lim])[interior(d_data_cg[timeframe_lim]) .!= 0]) + 1e-4)
+plim_cg = (-maximum(abs, interior(p_data_cg)) - 1e-4, maximum(abs, interior(p_data_cg)) + 1e-4)
+
+Tbarlim = (find_min(interior(Tbar_data_fft)) - 1e-4, find_max(interior(Tbar_data_fft)) + 1e-4)
+Sbarlim = (find_min(interior(Sbar_data_fft)) - 1e-4, find_max(interior(Sbar_data_fft)) + 1e-4)
 
 colormap_symmetric = :balance
 colormap_asymmetric = :turbo
 
-hmT = heatmap!(axT_fft, xC, zC, T_fftₙ, colorrange = Tlim, colormap = colormap_asymmetric)
-hmS = heatmap!(axS_fft, xC, zC, S_fftₙ, colorrange = Slim, colormap = Reverse(colormap_asymmetric))
-hmd = heatmap!(axd_fft, xC, zC, d_fftₙ, colorrange = dlim, colormap = colormap_symmetric)
-hmp = heatmap!(axp_fft, xC, zC, p_fftₙ, colorrange = plim, colormap = colormap_symmetric)
-hmb = heatmap!(axb_fft, xC, zC, b_fftₙ, colorrange = blim, colormap = colormap_asymmetric)
+hmT_FFT = heatmap!(axT_fft, xC, zC, T_fftₙ, colorrange = Tlim_FFT, colormap = colormap_asymmetric)
+hmS_FFT = heatmap!(axS_fft, xC, zC, S_fftₙ, colorrange = Slim_FFT, colormap = Reverse(colormap_asymmetric))
+hmd_FFT = heatmap!(axd_fft, xC, zC, d_fftₙ, colorrange = dlim_FFT, colormap = colormap_symmetric)
+hmp_FFT = heatmap!(axp_fft, xC, zC, p_fftₙ, colorrange = plim_FFT, colormap = colormap_symmetric)
+hmb_FFT = heatmap!(axb_fft, xC, zC, b_fftₙ, colorrange = blim_FFT, colormap = colormap_asymmetric)
 
-heatmap!(axT_cg, xC, zC, T_cgₙ, colorrange = Tlim, colormap = colormap_asymmetric)
-heatmap!(axS_cg, xC, zC, S_cgₙ, colorrange = Slim, colormap = Reverse(colormap_asymmetric))
-heatmap!(axd_cg, xC, zC, d_cgₙ, colorrange = dlim, colormap = colormap_symmetric)
-heatmap!(axp_cg, xC, zC, p_cgₙ, colorrange = plim, colormap = colormap_symmetric)
-heatmap!(axb_cg, xC, zC, b_cgₙ, colorrange = blim, colormap = colormap_asymmetric)
+hmT_cg = heatmap!(axT_cg, xC, zC, T_cgₙ, colorrange = Tlim_cg, colormap = colormap_asymmetric)
+hmS_cg = heatmap!(axS_cg, xC, zC, S_cgₙ, colorrange = Slim_cg, colormap = Reverse(colormap_asymmetric))
+hmd_cg = heatmap!(axd_cg, xC, zC, d_cgₙ, colorrange = dlim_cg, colormap = colormap_symmetric)
+hmp_cg = heatmap!(axp_cg, xC, zC, p_cgₙ, colorrange = plim_cg, colormap = colormap_symmetric)
+hmb_cg = heatmap!(axb_cg, xC, zC, b_cgₙ, colorrange = blim_cg, colormap = colormap_asymmetric)
 
-Colorbar(fig[3, 1], hmT, label = "°C", vertical=false, flipaxis=false)
-Colorbar(fig[3, 2], hmS, label = "psu", vertical=false, flipaxis=false)
-Colorbar(fig[3, 3], hmd, label = "s⁻¹", vertical=false, flipaxis=false)
-Colorbar(fig[3, 4], hmp, label = "Pa", vertical=false, flipaxis=false)
-Colorbar(fig[3, 5], hmb, label = "m²/s²", vertical=false, flipaxis=false)
+Colorbar(fig[2, 1], hmT_FFT, label = "°C", vertical=false, flipaxis=false)
+Colorbar(fig[2, 2], hmS_FFT, label = "psu", vertical=false, flipaxis=false)
+Colorbar(fig[2, 3], hmd_FFT, label = "s⁻¹", vertical=false, flipaxis=false)
+Colorbar(fig[2, 4], hmp_FFT, label = "Pa", vertical=false, flipaxis=false)
+Colorbar(fig[2, 5], hmb_FFT, label = "m²/s²", vertical=false, flipaxis=false)
+
+Colorbar(fig[4, 1], hmT_cg, label = "°C", vertical=false, flipaxis=false)
+Colorbar(fig[4, 2], hmS_cg, label = "psu", vertical=false, flipaxis=false)
+Colorbar(fig[4, 3], hmd_cg, label = "s⁻¹", vertical=false, flipaxis=false)
+Colorbar(fig[4, 4], hmp_cg, label = "Pa", vertical=false, flipaxis=false)
+Colorbar(fig[4, 5], hmb_cg, label = "m²/s²", vertical=false, flipaxis=false)
 
 lines!(axTbar, times ./ 1days, Tbar_cg, label="PCG")
 lines!(axSbar, times ./ 1days, Sbar_cg, label="PCG")
@@ -291,9 +305,9 @@ ylims!(axSbar, Sbarlim)
 axislegend(axTbar)
 
 display(fig)
-display(fig)
+
 # save("./cg_fft_gaussian_ridge_mwe_fields_constantS.pdf", fig)
-CairoMakie.record(fig, "./Output/cg_fft_gaussian_ridge_mwe_fields_constantS.mp4", 1:Nt, framerate=15, px_per_unit=2) do nn
+CairoMakie.record(fig, "./Output/cg_fft_gaussian_ridge_mwe_fields_constantS_centered.mp4", 1:Nt, framerate=15, px_per_unit=2) do nn
     n[] = nn
 end
 #%%
