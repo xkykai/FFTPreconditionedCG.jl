@@ -144,8 +144,8 @@ for precond_name in preconditioners
     end
 
     if ngpus == 1 || model.architecture.local_rank == 0
-        mkpath("./reports/strongscaling_H100")
-        jldopen("./reports/strongscaling_H100/cg_iters.jld2", "a") do file
+        mkpath("./reports/strongscaling_H100/benchmark_$(ngpus)gpu")
+        jldopen("./reports/strongscaling_H100/benchmark_$(ngpus)gpu/cg_iters.jld2", "a") do file
             file["$(precond_name)"] = cg_iters
         end
     end
