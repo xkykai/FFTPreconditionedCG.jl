@@ -50,7 +50,8 @@ grid = RectilinearGrid(GPU(), Float64,
 no_slip_bc = ValueBoundaryCondition(0)
 
 const τ = 10 / sqrt(N²)
-b_bc(z, t) = B * tanh(t / τ)
+# b_bc(z, t) = B * tanh(t / τ)
+b_bc(y, z, t) = B * tanh(t / τ)
 
 w_bcs = FieldBoundaryConditions(no_slip_bc)
 b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(b_bc))
@@ -111,15 +112,15 @@ simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, b, c, Nu);
 simulation.output_writers[:averaged] = JLD2Writer(model, (; Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
                                               schedule = AveragedTimeInterval(10, window=10),
-                                              with_halos = false,
+                                              with_halos = true,
                                               overwrite_existing = true)
 
 run!(simulation)
 #%%
-u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u", backend=OnDisk())
-w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w", backend=OnDisk())
-b_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "b", backend=OnDisk())
-c_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "c", backend=OnDisk())
+u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u")
+w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
+b_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "b")
+c_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "c")
 #%%
 Nt = length(u_data.times)
 times = u_data.times
