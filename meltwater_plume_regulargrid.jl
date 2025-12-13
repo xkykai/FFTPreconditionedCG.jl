@@ -51,10 +51,14 @@ no_slip_bc = ValueBoundaryCondition(0)
 
 const τ = 10 / sqrt(N²)
 # b_bc(z, t) = B * tanh(t / τ)
-b_bc(y, z, t) = B * tanh(t / τ)
+# b_bc(y, z, t) = B * tanh(t / τ)
+@inline b_timeramp(j, k, grid, clock, model_fields, p) = p.B * tanh(clock.time / p.τ)
+
+b_west_bc = ValueBoundaryCondition(b_timeramp, discrete_form=true, parameters=(; B, τ))
 
 w_bcs = FieldBoundaryConditions(no_slip_bc)
-b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(b_bc))
+# b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(b_bc))
+b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(b_west_bc))
 c_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(B))
 
 b_forcing_func(x, z, t, w, N²) = -w * N²
