@@ -21,10 +21,10 @@ const Pr = 1
 const ν = sqrt(B^4 / (N²)^3 / Ra * Pr)
 const κ = ν / Pr
 
-# const Nx = 512
-# const Nz = 1024
-const Nx = 1024
-const Nz = 2048
+const Nx = 512
+const Nz = 1024
+# const Nx = 1024
+# const Nz = 2048
 
 advection = Centered()
 closure = ScalarDiffusivity(; ν, κ)
@@ -49,8 +49,8 @@ w_bcs = FieldBoundaryConditions(no_slip_bc)
 b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(b_bc))
 c_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(B))
 
-b_forcing_func(x, y, z, t, w) = -w * N²
-b_forcing = Forcing(b_forcing_func, field_dependencies=:w)
+b_forcing_func(x, z, t, w, N²) = -w * N²
+b_forcing = Forcing(b_forcing_func, field_dependencies=:w, parameters=N²)
 
 model = NonhydrostaticModel(; grid,
                               tracers = (:b, :c),
@@ -76,8 +76,6 @@ b, c = model.tracers.b, model.tracers.c
 function progress(sim)
     msg = @sprintf("Iter: %d, time: %s, Δt: %s",
                     iteration(sim), prettytime(sim), prettytime(sim.Δt))
-
-    compute_flow_divergence!(d, sim.model)
 
     msg *= @sprintf(", max u: %6.3e, max v: %6.3e, max w: %6.3e, max b: %6.3e, max c: %6.3e",
                     maximum(abs, sim.model.velocities.u),
