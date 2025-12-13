@@ -21,8 +21,10 @@ const Pr = 1
 const ν = sqrt(B^4 / (N²)^3 / Ra * Pr)
 const κ = ν / Pr
 
-const Nx = 512
-const Nz = 1024
+# const Nx = 512
+# const Nz = 1024
+const Nx = 1024
+const Nz = 2048
 
 advection = Centered()
 closure = ScalarDiffusivity(; ν, κ)
@@ -93,7 +95,7 @@ end
 simulation.callbacks[:progress] = Callback(progress, IterationInterval(100))
 
 const l = (4 * ν * κ / N²)^(1/2)
-Nu = Average(-∂x(b) / (B / l), dims=(2, 3))
+Nu = Field(Average(-∂x(b) / (B / l), dims=(2, 3)))
 
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, b, c, Nu);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
