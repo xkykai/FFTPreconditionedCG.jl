@@ -58,7 +58,8 @@ b_west_bc = ValueBoundaryCondition(b_timeramp, discrete_form=true, parameters=(;
 
 w_bcs = FieldBoundaryConditions(no_slip_bc)
 # b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(b_bc))
-b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(b_west_bc))
+# b_bcs = FieldBoundaryConditions(west = b_west_bc)
+b_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(B))
 c_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(B))
 
 b_forcing_func(x, z, t, w, N²) = -w * N²
