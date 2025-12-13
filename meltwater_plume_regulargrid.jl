@@ -29,10 +29,17 @@ const Nz = 1024
 advection = Centered()
 closure = ScalarDiffusivity(; ν, κ)
 
-filename = "meltwater_plume_$(advection)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+if advection isa WENO
+    advection_str = "WENO"
+elseif advection isa Centered
+    advection_str = "Centered"
+end
+
+filename = "meltwater_plume_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
+@info "Data will be saved to $(FILE_DIR)"
 
 grid = RectilinearGrid(GPU(), Float64,
                        size = (Nx, Nz), 
