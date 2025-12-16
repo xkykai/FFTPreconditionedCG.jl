@@ -64,10 +64,13 @@ end
 end
 
 function setup_grid()
-    Lx = Ly = Lz = 1
+    Lx = ngpus
+    Ly = Lz = 1
+    Nx = N * ngpus
+    Ny = Nz = N
 
     grid = RectilinearGrid(arch, Float64,
-                           size = (N, N, N), 
+                           size = (Nx, Ny, Nz), 
                            halo = (6, 6, 6),
                            x = (0, Lx),
                            y = (0, Ly),
@@ -76,9 +79,11 @@ function setup_grid()
 
     slope(x, y) = 0.35
 
-    Nr = 16 # number of roughness elements
-    hx = Lx / Nr / 2
-    hy = Ly / Nr / 2
+    Nr_x = 16 * ngpus # number of roughness elements in x-direction
+    Nr_y = 16 # number of roughness elements in y-direction
+
+    hx = Lx / Nr_x / 2
+    hy = Ly / Nr_y / 2
     x₀s = hx:2hx:Lx-hx
     y₀s = hy:2hy:Ly-hy
 
@@ -211,8 +216,8 @@ for precond_name in preconditioners
     end
 
     if ngpus == 1 || model.architecture.local_rank == 0
-        mkpath("./reports/strongscaling_H100/benchmark_$(ngpus)gpu")
-        jldopen("./reports/strongscaling_H100/benchmark_$(ngpus)gpu/cg_iters.jld2", "a") do file
+        mkpath("./reports/weakscaling_H100/benchmark_$(ngpus)gpu")
+        jldopen("./reports/weakscaling_H100/benchmark_$(ngpus)gpu/cg_iters.jld2", "a") do file
             file["$(precond_name)"] = cg_iters
         end
     end
