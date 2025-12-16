@@ -9,10 +9,6 @@ using Oceananigans.DistributedComputations
 using Statistics
 using CUDA
 using NVTX
-using ArgParse
-
-args = parse_commandline()
-ngpus = args["ngpus"]
 
 arch = GPU()
 
