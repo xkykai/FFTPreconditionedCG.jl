@@ -1,4 +1,3 @@
-using MPI
 using Oceananigans
 using Printf
 using JLD2
@@ -12,30 +11,11 @@ using CUDA
 using NVTX
 using ArgParse
 
-MPI.Init()
-
-function parse_commandline()
-    s = ArgParseSettings()
-  
-    @add_arg_table! s begin
-      "--ngpus"
-        help = "Number of GPUs to use"
-        arg_type = Int
-        default = 1
-    end
-    return parse_args(s)
-end
-
 args = parse_commandline()
 ngpus = args["ngpus"]
 
-if MPI.Comm_size(MPI.COMM_WORLD) == 1
-    arch = GPU()
-else
-    arch = Distributed(GPU(); partition = Partition(x = DistributedComputations.Equal()), synchronized_communication=false)
-end
+arch = GPU()
 
-const N = 480
 const Ra = 1e6
 const ν = κ = 1 / sqrt(Ra)
 
@@ -63,7 +43,7 @@ end
     end
 end
 
-function setup_grid()
+function setup_grid(N)
     Lx = Ly = Lz = 1
 
     grid = RectilinearGrid(arch, Float64,
@@ -140,57 +120,16 @@ function setup_model(grid, pressure_solver)
     return model
 end
 
-Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
+Ns = [32, 64, 96, 128, 192, 256, 384, 512]
+Δts = [min(1 / N, (1/N^2) / max(ν, κ)) / 3 for N in Ns]
 
-warmup_nsteps = 50
-nsteps = 50
+for (N, Δt) in zip(Ns, Δts)
+    warmup_nsteps = 50
+    nsteps = 50
 
-@info "Benchmarking FFT solver"
-grid = setup_grid()
-pressure_solver = nothing
-model = setup_model(grid, pressure_solver)
-
-for step in 1:warmup_nsteps
-    time_step!(model, Δt)
-end
-
-for step in 1:nsteps
-    NVTX.@range "FFT timestep" begin
-        time_step!(model, Δt)
-    end
-end
-
-preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
-
-for precond_name in preconditioners
-    @info "Benchmarking $precond_name preconditioner"
-    global grid = nothing
-    global model = nothing
-    global pressure_solver = nothing
-    global preconditioner = nothing
-    GC.gc()
-    CUDA.reclaim()
-
-    grid = setup_grid()
-    if precond_name == "no"
-        preconditioner = nothing
-    elseif precond_name == "FFT64"
-        preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
-    elseif precond_name == "FFT32"
-        reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
-        preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
-    elseif precond_name == "MITgcm"
-        preconditioner = DiagonallyDominantPreconditioner()
-    end
-
-    volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
-    cg_iters = zeros(nsteps)
-
-    reltol = 100 * eps(grid) * volume^2
-    abstol = 100 * eps(grid)
-
-    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
-
+    @info "Benchmarking FFT solver"
+    grid = setup_grid(N)
+    pressure_solver = nothing
     model = setup_model(grid, pressure_solver)
 
     for step in 1:warmup_nsteps
@@ -198,19 +137,63 @@ for precond_name in preconditioners
     end
 
     for step in 1:nsteps
-        NVTX.@range "$(precond_name) preconditioner" begin
+        NVTX.@range "FFT timestep $(N)" begin
             time_step!(model, Δt)
-        end
-
-        if ngpus == 1 || model.architecture.local_rank == 0
-            cg_iters[step] = model.pressure_solver.conjugate_gradient_solver.iteration        
         end
     end
 
-    if ngpus == 1 || model.architecture.local_rank == 0
-        mkpath("./reports/strongscaling_H100/benchmark_$(ngpus)gpu")
-        jldopen("./reports/strongscaling_H100/benchmark_$(ngpus)gpu/cg_iters.jld2", "a") do file
-            file["$(precond_name)"] = cg_iters
+    preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
+
+    for precond_name in preconditioners
+        @info "Benchmarking $precond_name preconditioner"
+        global grid = nothing
+        global model = nothing
+        global pressure_solver = nothing
+        global preconditioner = nothing
+        GC.gc()
+        CUDA.reclaim()
+
+        grid = setup_grid(N)
+        if precond_name == "no"
+            preconditioner = nothing
+        elseif precond_name == "FFT64"
+            preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
+        elseif precond_name == "FFT32"
+            reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
+            preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
+        elseif precond_name == "MITgcm"
+            preconditioner = DiagonallyDominantPreconditioner()
+        end
+
+        volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
+        cg_iters = zeros(nsteps)
+
+        reltol = 100 * eps(grid) * volume^2
+        abstol = 100 * eps(grid)
+
+        pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
+
+        model = setup_model(grid, pressure_solver)
+
+        for step in 1:warmup_nsteps
+            time_step!(model, Δt)
+        end
+
+        for step in 1:nsteps
+            NVTX.@range "$(precond_name) preconditioner $(N)" begin
+                time_step!(model, Δt)
+            end
+
+            if ngpus == 1 || model.architecture.local_rank == 0
+                cg_iters[step] = model.pressure_solver.conjugate_gradient_solver.iteration        
+            end
+        end
+
+        if ngpus == 1 || model.architecture.local_rank == 0
+            mkpath("./reports/single_H100/")
+            jldopen("./reports/single_H100/cg_iters.jld2", "a") do file
+                file["$(precond_name)_$(N)"] = cg_iters
+            end
         end
     end
 end
