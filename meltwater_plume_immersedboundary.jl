@@ -62,7 +62,7 @@ end
 
 filename = "meltwater_plume_immersedgrid_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 
-grid = RectilinearGrid(CPU(), Float64,
+grid = RectilinearGrid(GPU(), Float64,
                        size = (Nx_total, Nz), 
                        x = (x_start, Lx),
                        z = (0, Lz),
@@ -90,7 +90,7 @@ mkpath(FILE_DIR)
 no_slip_bc = ValueBoundaryCondition(0)
 
 const τ = 10 / sqrt(N²)
-@inline b_timeramp(j, k, grid, clock, model_fields, p) = p.B * tanh(clock.time / p.τ)
+@inline b_timeramp(i, j, k, grid, clock, model_fields, p) = p.B * tanh(clock.time / p.τ)
 
 b_west_bc = ValueBoundaryCondition(b_timeramp, discrete_form=true, parameters=(; B, τ))
 
