@@ -10,6 +10,22 @@ using Oceananigans.Solvers: FFTBasedPoissonSolver, ConjugateGradientPoissonSolve
 using KernelAbstractions: @kernel, @index
 using Statistics
 using CUDA
+using ArgParse
+
+function parse_commandline()
+    s = ArgParseSettings()
+  
+    @add_arg_table! s begin
+      "--solver"
+        help = "Number of GPUs to use"
+        arg_type = String
+        default = "FFT"
+    end
+    return parse_args(s)
+end
+
+args = parse_commandline()
+solver_type = args["solver"]
 
 const L = 1
 const Lx = L * 2
@@ -22,12 +38,17 @@ const Pr = 1
 const ν = sqrt(B^4 / (N²)^3 / Ra * Pr)
 const κ = ν / Pr
 
-const Nx = 512
-const Nz = 1024
+# const Nx = 512
+# const Nz = 1024
 
-const Nx_ice = 640 - Nx
+# const Nx_ice = 640 - Nx
+
+const Nx = 1024
+const Nz = 2048
+
+const Nx_ice = 1280 - Nx
+
 const x_start = -Lx / Nx * Nx_ice
-
 const Nx_total = Nx + Nx_ice
 
 advection = Centered()
@@ -50,16 +71,14 @@ grid = RectilinearGrid(CPU(), Float64,
 ice(x, z) = x <= 0
 grid = ImmersedBoundaryGrid(grid, GridFittedBoundary(ice))
 
-reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
-preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
-pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=100; preconditioner)
-
-# pressure_solver = nonhydrostatic_pressure_solver(grid)
-
-if pressure_solver isa FFTBasedPoissonSolver
-    pressure_solver_str = "FFT"
-else
-    pressure_solver_str = "CG"
+if solver_type == "FFT"
+    pressure_solver = FFTBasedPoissonSolver(grid.underlying_grid)
+    pressure_solver_str = solver_type
+elseif solver_type == "CG"
+    reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
+    preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
+    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=100; preconditioner)
+    pressure_solver_str = solver_type
 end
 
 filename *= "_$(pressure_solver_str)"
@@ -71,10 +90,12 @@ mkpath(FILE_DIR)
 no_slip_bc = ValueBoundaryCondition(0)
 
 const τ = 10 / sqrt(N²)
-b_bc(x, z, t) = B * tanh(t / τ)
+@inline b_timeramp(j, k, grid, clock, model_fields, p) = p.B * tanh(clock.time / p.τ)
+
+b_west_bc = ValueBoundaryCondition(b_timeramp, discrete_form=true, parameters=(; B, τ))
 
 w_bcs = FieldBoundaryConditions(no_slip_bc)
-b_bcs = FieldBoundaryConditions(immersed = ValueBoundaryCondition(b_bc))
+b_bcs = FieldBoundaryConditions(immersed = b_west_bc, east = ValueBoundaryCondition(0))
 c_bcs = FieldBoundaryConditions(immersed = ValueBoundaryCondition(B))
 
 b_forcing_func(x, z, t, w, N²) = -w * N²
@@ -86,13 +107,14 @@ model = NonhydrostaticModel(; grid, pressure_solver,
                               advection,
                               closure,
                               boundary_conditions = (w = w_bcs, b = b_bcs, c = c_bcs),
-                              forcing = (; b = b_forcing))
+                              forcing = (; b = b_forcing),
+                              hydrostatic_pressure_anomaly = nothing)
 
 b₁(x, z) = rand() * 1e-5
 set!(model, b = b₁)
 
-stop_time = 100 / sqrt(N²)
-Δt = (Lz / Nz) / B
+stop_time = 500 / sqrt(N²)
+Δt = min((Lz / Nz) / B, (Lx / Nx)^2 / max(ν, κ)) / 5
 simulation = Simulation(model; Δt, stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
 
@@ -147,24 +169,25 @@ simulation.callbacks[:progress] = Callback(progress, IterationInterval(100))
 const l = (4 * ν * κ / N²)^(1/2)
 Nu = Average(-∂x(b) / (B / l), dims=(2, 3))
 
-simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, b, c, Nu, d, pNHS = model.pressures.pNHS);
+simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, b, c, d, pNHS = model.pressures.pNHS);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
-                                              schedule = TimeInterval(1),
+                                              schedule = TimeInterval(5),
                                               with_halos = true,
                                               overwrite_existing = true)
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(10, window=10),
+                                              schedule = AveragedTimeInterval(50, window=50),
+                                              indices = (:, 1, 1),
                                               with_halos = false,
                                               overwrite_existing = true)
 
 run!(simulation)
 #%%
-u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u", backend=OnDisk())
-w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w", backend=OnDisk())
-b_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "b", backend=OnDisk())
-c_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "c", backend=OnDisk())
+u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u")
+w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
+b_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "b")
+c_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "c")
 #%%
 Nt = length(u_data.times)
 times = u_data.times
@@ -178,10 +201,10 @@ fig = Figure(size=(2000, 1000), fontsize=20)
 
 n = Observable(Nt)
 
-axu = Axis(fig[1, 1]; title = "u velocity", xlabel = "x (m)", ylabel = "z (m)")
-axw = Axis(fig[1, 2]; title = "w velocity", xlabel = "x (m)", ylabel = "z (m)")
-axb = Axis(fig[1, 3]; title = "buoyancy", xlabel = "x (m)", ylabel = "z (m)")
-axc = Axis(fig[1, 4]; title = "concentration", xlabel = "x (m)", ylabel = "z (m)")
+axu = Axis(fig[1, 1]; title = "u velocity", xlabel = "x", ylabel = "z")
+axw = Axis(fig[1, 2]; title = "w velocity", xlabel = "x", ylabel = "z")
+axb = Axis(fig[1, 3]; title = "buoyancy", xlabel = "x", ylabel = "z")
+axc = Axis(fig[1, 4]; title = "concentration", xlabel = "x", ylabel = "z")
 
 uₙ = @lift interior(u_data[$n], :, 1, :)
 wₙ = @lift interior(w_data[$n], :, 1, :)
@@ -193,14 +216,14 @@ wlim = (-maximum(abs, interior(w_data[Nt])), maximum(abs, interior(w_data[Nt])))
 blim = (-maximum(abs, interior(b_data[Nt])), maximum(abs, interior(b_data[Nt]))) ./ 2
 clim = (0, 1)
 
-hmu = heatmap!(axu, uₙ, colormap=:balance, colorrange=ulim)
-hmw = heatmap!(axw, wₙ, colormap=:balance, colorrange=wlim)
-hmb = heatmap!(axb, bₙ, colormap=:balance, colorrange=blim)
-hmc = heatmap!(axc, cₙ, colormap=:plasma, colorrange=clim)
+hmu = heatmap!(axu, xF, zC, uₙ, colormap=:balance, colorrange=ulim)
+hmw = heatmap!(axw, xC, zF, wₙ, colormap=:balance, colorrange=wlim)
+hmb = heatmap!(axb, xC, zC, bₙ, colormap=:balance, colorrange=blim)
+hmc = heatmap!(axc, xC, zC, cₙ, colormap=:plasma, colorrange=clim)
 
-Colorbar(fig[2, 1], hmu; label = "u (m/s)", vertical=false, flipaxis=false)
-Colorbar(fig[2, 2], hmw; label = "w (m/s)", vertical=false, flipaxis=false)
-Colorbar(fig[2, 3], hmb; label = "buoyancy (m/s²)", vertical=false, flipaxis=false)
+Colorbar(fig[2, 1], hmu; label = "u", vertical=false, flipaxis=false)
+Colorbar(fig[2, 2], hmw; label = "w", vertical=false, flipaxis=false)
+Colorbar(fig[2, 3], hmb; label = "buoyancy", vertical=false, flipaxis=false)
 Colorbar(fig[2, 4], hmc; label = "concentration", vertical=false, flipaxis=false)
 
 time_str = @lift @sprintf("t = %.2f s", times[$n])
@@ -209,4 +232,20 @@ Label(fig[0, :], time_str, fontsize=20)
 CairoMakie.record(fig, "./$(FILE_DIR)/$(filename).mp4", 1:Nt, framerate=10) do nn
     n[] = nn
 end
+#%%
+Nu_data = FieldTimeSeries("$(FILE_DIR)/averaged_fields.jld2", "Nu")
+Nu = interior(Nu_data, Nx_ice + 1, 1, 1, :)
+times = Nu_data.times
+
+xF = xnodes(Nu_data.grid, Face())
+fig = Figure()
+ax = Axis(fig[1, 1]; title = "Nusselt number profile", xlabel = "t", ylabel = "Nu")
+lines!(ax, times, Nu)
+save("./$(FILE_DIR)/$(filename)_nusselt.png", fig, px_per_unit=4)
+#%%
+fig = Figure()
+Nt = length(Nu_data.times)
+ax = Axis(fig[1, 1]; title = "Nusselt number at t = $(Nu_data.times[Nt])", xlabel = "x", ylabel = "z")
+lines!(ax, xF, interior(Nu_data, :, 1, 1, Nt))
+save("./$(FILE_DIR)/$(filename)_nusselt_profile.png", fig, px_per_unit=4)
 #%%

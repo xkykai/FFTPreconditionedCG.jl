@@ -33,7 +33,7 @@ elseif advection isa Centered
     advection_str = "Centered"
 end
 
-filename = "meltwater_plume_eastforcing_nopHY_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+filename = "meltwater_plume_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -135,10 +135,10 @@ fig = Figure(size=(2000, 1000), fontsize=20)
 
 n = Observable(Nt)
 
-axu = Axis(fig[1, 1]; title = "u velocity", xlabel = "x (m)", ylabel = "z (m)")
-axw = Axis(fig[1, 2]; title = "w velocity", xlabel = "x (m)", ylabel = "z (m)")
-axb = Axis(fig[1, 3]; title = "buoyancy", xlabel = "x (m)", ylabel = "z (m)")
-axc = Axis(fig[1, 4]; title = "concentration", xlabel = "x (m)", ylabel = "z (m)")
+axu = Axis(fig[1, 1]; title = "u velocity", xlabel = "x", ylabel = "z")
+axw = Axis(fig[1, 2]; title = "w velocity", xlabel = "x", ylabel = "z")
+axb = Axis(fig[1, 3]; title = "buoyancy", xlabel = "x", ylabel = "z")
+axc = Axis(fig[1, 4]; title = "concentration", xlabel = "x", ylabel = "z")
 
 uₙ = @lift interior(u_data[$n], :, 1, :)
 wₙ = @lift interior(w_data[$n], :, 1, :)
@@ -155,9 +155,9 @@ hmw = heatmap!(axw, xC, zF, wₙ, colormap=:balance, colorrange=wlim)
 hmb = heatmap!(axb, xC, zC, bₙ, colormap=:balance, colorrange=blim)
 hmc = heatmap!(axc, xC, zC, cₙ, colormap=:plasma, colorrange=clim)
 
-Colorbar(fig[2, 1], hmu; label = "u (m/s)", vertical=false, flipaxis=false)
-Colorbar(fig[2, 2], hmw; label = "w (m/s)", vertical=false, flipaxis=false)
-Colorbar(fig[2, 3], hmb; label = "buoyancy (m/s²)", vertical=false, flipaxis=false)
+Colorbar(fig[2, 1], hmu; label = "u", vertical=false, flipaxis=false)
+Colorbar(fig[2, 2], hmw; label = "w", vertical=false, flipaxis=false)
+Colorbar(fig[2, 3], hmb; label = "buoyancy", vertical=false, flipaxis=false)
 Colorbar(fig[2, 4], hmc; label = "concentration", vertical=false, flipaxis=false)
 
 time_str = @lift @sprintf("t = %.2f s", times[$n])
