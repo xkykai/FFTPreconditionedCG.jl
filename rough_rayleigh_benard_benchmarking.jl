@@ -142,10 +142,10 @@ for (N, Δt) in zip(Ns, Δts)
 
     for precond_name in preconditioners
         @info "Benchmarking $precond_name preconditioner"
-        global grid = nothing
-        global model = nothing
-        global pressure_solver = nothing
-        global preconditioner = nothing
+        grid = nothing
+        model = nothing
+        pressure_solver = nothing
+        preconditioner = nothing
         GC.gc()
         CUDA.reclaim()
 
