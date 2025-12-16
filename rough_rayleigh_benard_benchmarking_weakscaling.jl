@@ -79,8 +79,8 @@ function setup_grid()
 
     slope(x, y) = 0.35
 
-    Nr_x = 16 * ngpus # number of roughness elements in x-direction
-    Nr_y = 16 # number of roughness elements in y-direction
+    Nr_x = 8 * ngpus # number of roughness elements in x-direction
+    Nr_y = 8 # number of roughness elements in y-direction
 
     hx = Lx / Nr_x / 2
     hy = Ly / Nr_y / 2

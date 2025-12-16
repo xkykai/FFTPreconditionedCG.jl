@@ -76,7 +76,7 @@ function setup_grid()
 
     slope(x, y) = 0.35
 
-    Nr = 16 # number of roughness elements
+    Nr = 8 # number of roughness elements
     hx = Lx / Nr / 2
     hy = Ly / Nr / 2
     x₀s = hx:2hx:Lx-hx
