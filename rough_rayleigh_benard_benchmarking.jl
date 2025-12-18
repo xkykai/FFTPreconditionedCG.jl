@@ -180,16 +180,12 @@ for (N, Δt) in zip(Ns, Δts)
                 time_step!(model, Δt)
             end
 
-            if ngpus == 1 || model.architecture.local_rank == 0
-                cg_iters[step] = model.pressure_solver.conjugate_gradient_solver.iteration        
-            end
+            cg_iters[step] = model.pressure_solver.conjugate_gradient_solver.iteration        
         end
 
-        if ngpus == 1 || model.architecture.local_rank == 0
-            mkpath("./reports/single_H100/")
-            jldopen("./reports/single_H100/cg_iters.jld2", "a") do file
-                file["$(precond_name)_$(N)"] = cg_iters
-            end
+        mkpath("./reports/single_H100/")
+        jldopen("./reports/single_H100/cg_iters.jld2", "a") do file
+            file["$(precond_name)_$(N)"] = cg_iters
         end
     end
 end
