@@ -102,6 +102,7 @@ simulation.callbacks[:progress] = Callback(progress, IterationInterval(100))
 
 const l = (4 * ν * κ / N²)^(1/2)
 Nu = Field(Average(-∂x(b) / (B / l), dims=(2, 3)))
+bbar = Field(Average(b, dims=(2, 3)))
 
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, b, c);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
@@ -109,9 +110,9 @@ simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, b, c);
                                               with_halos = true,
                                               overwrite_existing = true)
 
-simulation.output_writers[:averaged] = JLD2Writer(model, (; Nu);
+simulation.output_writers[:averaged] = JLD2Writer(model, (; Nu, b = bbar);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(50, window=50),
+                                              schedule = AveragedTimeInterval(100, window=100),
                                               indices = (1, 1, 1),
                                               with_halos = true,
                                               overwrite_existing = true)
