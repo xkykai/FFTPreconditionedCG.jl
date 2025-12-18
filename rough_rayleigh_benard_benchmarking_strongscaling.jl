@@ -142,8 +142,8 @@ end
 
 Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
 
-warmup_nsteps = 50
-nsteps = 50
+warmup_nsteps = 10
+nsteps = 40
 
 @info "Benchmarking FFT solver"
 grid = setup_grid()

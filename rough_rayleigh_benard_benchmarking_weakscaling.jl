@@ -150,8 +150,8 @@ end
 @info "Benchmarking FFT solver"
 grid = setup_grid()
 
-warmup_nsteps = 50
-nsteps = 50
+warmup_nsteps = 10
+nsteps = 40
 
 @info "Benchmarking FFT solver"
 grid = setup_grid()
