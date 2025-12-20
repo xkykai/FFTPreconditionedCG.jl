@@ -146,7 +146,7 @@ for (N, Δt) in zip(Ns, Δts)
     end
 
     jldopen(FILE_PATH, "a") do file
-        file["$(N)/FFT/times"] = times_FFT
+        file["$(N)/times/FFTstep"] = times_FFT
     end
     
     preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
@@ -197,8 +197,8 @@ for (N, Δt) in zip(Ns, Δts)
         end
 
         jldopen(FILE_PATH, "a") do file
-            file["$(N)/$(precond_name)/times"] = times
-            file["$(N)/$(precond_name)/cg_iters"] = cg_iters
+            file["$(N)/times/$(precond_name)"] = times
+            file["$(N)/cg_iters/$(precond_name)"] = cg_iters
         end
     end
 end
