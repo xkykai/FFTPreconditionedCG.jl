@@ -124,11 +124,11 @@ mkpath("./reports/")
 filename = "single_H100_timed.jld2"
 FILE_PATH = joinpath("./reports/", filename)
 
-for (N, Δt) in zip(Ns, Δts)
-    warmup_nsteps = 50
-    nsteps = 50
+warmup_nsteps = 50
+nsteps = 50
 
-    @info "Benchmarking FFT solver"
+for (N, Δt) in zip(Ns, Δts)
+    @info "Benchmarking FFT solver for N=$N"
     grid = setup_grid(N)
     pressure_solver = nothing
     model = setup_model(grid, pressure_solver)
@@ -152,7 +152,7 @@ for (N, Δt) in zip(Ns, Δts)
     preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
 
     for precond_name in preconditioners
-        @info "Benchmarking $precond_name preconditioner"
+        @info "Benchmarking $precond_name preconditioner for N=$N"
         grid = nothing
         model = nothing
         pressure_solver = nothing
