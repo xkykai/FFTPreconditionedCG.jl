@@ -165,10 +165,8 @@ end
 for step in 1:nsteps
     GC.gc()
     CUDA.reclaim()
-    NVTX.@range "FFT timestep" begin
-        t = @timed time_step!(model, Δt)
-        push!(times_FFT, t)
-    end
+    t = @timed time_step!(model, Δt)
+    push!(times_FFT, t)
 end
 
 local_rank = ngpus == 1 ? 0 : model.architecture.local_rank
@@ -222,10 +220,8 @@ for precond_name in preconditioners
     for step in 1:nsteps
         GC.gc()
         CUDA.reclaim()
-        NVTX.@range "$(precond_name) preconditioner" begin
-            t = @timed time_step!(model, Δt)
-            push!(times, t)
-        end
+        t = @timed time_step!(model, Δt)
+        push!(times, t)
         push!(cg_iters, model.pressure_solver.conjugate_gradient_solver.iteration)
     end
 

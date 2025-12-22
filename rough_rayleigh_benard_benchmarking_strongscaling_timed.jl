@@ -9,7 +9,6 @@ using Oceananigans.Grids: with_number_type
 using Oceananigans.DistributedComputations
 using Statistics
 using CUDA
-using NVTX
 using ArgParse
 
 MPI.Init()
