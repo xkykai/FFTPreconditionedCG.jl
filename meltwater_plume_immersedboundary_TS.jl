@@ -100,6 +100,7 @@ T_west_bc = ValueBoundaryCondition(T_timeramp, discrete_form=true, parameters=(;
 
 w_bcs = FieldBoundaryConditions(no_slip_bc)
 T_bcs = FieldBoundaryConditions(immersed = T_west_bc, east = ValueBoundaryCondition(0))
+S_bcs = FieldBoundaryConditions(ValueBoundaryCondition(0))
 c_bcs = FieldBoundaryConditions(immersed = ValueBoundaryCondition(B), east = ValueBoundaryCondition(0))
 
 b_forcing_func(x, z, t, w, N²) = -w * N²
@@ -111,12 +112,12 @@ model = NonhydrostaticModel(; grid, pressure_solver,
                               buoyancy = SeawaterBuoyancy(),
                               advection,
                               closure,
-                              boundary_conditions = (w = w_bcs, T = T_bcs, c = c_bcs),
+                              boundary_conditions = (w = w_bcs, T = T_bcs, S = S_bcs, c = c_bcs),
                               forcing = (; T = T_forcing, S = S_forcing),
                               hydrostatic_pressure_anomaly = nothing)
 
 T₁(x, z) = rand() * 1e-5
-S₁(x, z) = rand() * 1e-5
+S₁(x, z) = 0
 set!(model, T = T₁, S = S₁)
 
 stop_time = 500 / sqrt(N²)
