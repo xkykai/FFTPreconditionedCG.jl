@@ -33,7 +33,7 @@ elseif advection isa Centered
     advection_str = "Centered"
 end
 
-filename = "meltwater_plume_freeslip_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+filename = "meltwater_plume_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -56,8 +56,9 @@ const τ = 10 / sqrt(N²)
 
 T_west_bc = ValueBoundaryCondition(T_timeramp, discrete_form=true, parameters=(; B, τ, α, g))
 
-# w_bcs = FieldBoundaryConditions(no_slip_bc)
+w_bcs = FieldBoundaryConditions(no_slip_bc)
 T_bcs = FieldBoundaryConditions(west = T_west_bc, east = ValueBoundaryCondition(0))
+S_bcs = FieldBoundaryConditions(ValueBoundaryCondition(0))
 c_bcs = FieldBoundaryConditions(west = ValueBoundaryCondition(B), east = ValueBoundaryCondition(0))
 
 b_forcing_func(x, z, t, w, N²) = -w * N²
@@ -69,13 +70,12 @@ model = NonhydrostaticModel(; grid,
                               buoyancy = SeawaterBuoyancy(),
                               advection,
                               closure,
-                            #   boundary_conditions = (w = w_bcs, T = T_bcs, c = c_bcs),
-                              boundary_conditions = (T = T_bcs, c = c_bcs),
+                              boundary_conditions = (w = w_bcs, T = T_bcs, S = S_bcs, c = c_bcs),
                               forcing = (; T = T_forcing, S = S_forcing),
                               hydrostatic_pressure_anomaly = nothing)
 
 T₁(x, z) = rand() * 1e-5
-S₁(x, z) = rand() * 1e-5
+S₁(x, z) = 0
 set!(model, T = T₁, S = S₁)
 
 stop_time = 500 / sqrt(N²)
