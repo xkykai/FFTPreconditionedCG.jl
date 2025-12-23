@@ -103,9 +103,8 @@ T_bcs = FieldBoundaryConditions(immersed = T_west_bc, east = ValueBoundaryCondit
 S_bcs = FieldBoundaryConditions(ValueBoundaryCondition(0))
 c_bcs = FieldBoundaryConditions(immersed = ValueBoundaryCondition(B), east = ValueBoundaryCondition(0))
 
-b_forcing_func(x, z, t, w, N²) = -w * N²
-T_forcing = Forcing(b_forcing_func, field_dependencies=:w, parameters=N²)
-S_forcing = Forcing(b_forcing_func, field_dependencies=:w, parameters=N²)
+T_forcing_func(x, z, t, w, p) = -w * p.N² / p.α / p.g
+T_forcing = Forcing(T_forcing_func, field_dependencies=:w, parameters=(; N², α, g))
 
 model = NonhydrostaticModel(; grid, pressure_solver,
                               tracers = (:T, :S, :c),
@@ -113,7 +112,7 @@ model = NonhydrostaticModel(; grid, pressure_solver,
                               advection,
                               closure,
                               boundary_conditions = (w = w_bcs, T = T_bcs, S = S_bcs, c = c_bcs),
-                              forcing = (; T = T_forcing, S = S_forcing),
+                              forcing = (; T = T_forcing),
                               hydrostatic_pressure_anomaly = nothing)
 
 T₁(x, z) = rand() * 1e-5
