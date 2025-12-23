@@ -33,7 +33,7 @@ elseif advection isa Centered
     advection_str = "Centered"
 end
 
-filename = "meltwater_plume_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
+filename = "meltwater_plume_TS_$(advection_str)_Ra_$(Ra)_Pr_$(Pr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
