@@ -121,7 +121,7 @@ Ns = [32, 64, 96, 128, 192, 256, 384, 512]
 Δts = [min(1 / N, (1/N^2) / max(ν, κ)) / 3 for N in Ns]
 
 mkpath("./reports/")
-filename = "single_H100_timed.jld2"
+filename = "single_H100_timed_nogc.jld2"
 FILE_PATH = joinpath("./reports/", filename)
 
 warmup_nsteps = 50
@@ -139,8 +139,6 @@ for (N, Δt) in zip(Ns, Δts)
     end
 
     for step in 1:nsteps
-        GC.gc()
-        CUDA.reclaim()
         t = @timed time_step!(model, Δt)
         push!(times_FFT, t)
     end
@@ -189,8 +187,6 @@ for (N, Δt) in zip(Ns, Δts)
         times = []
 
         for step in 1:nsteps
-            GC.gc()
-            CUDA.reclaim()
             t = @timed time_step!(model, Δt)
             push!(times, t)
             push!(cg_iters, model.pressure_solver.conjugate_gradient_solver.iteration)

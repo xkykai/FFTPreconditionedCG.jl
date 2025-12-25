@@ -163,18 +163,16 @@ for step in 1:warmup_nsteps
 end
 
 for step in 1:nsteps
-    GC.gc()
-    CUDA.reclaim()
     t = @timed time_step!(model, Δt)
     push!(times_FFT, t)
 end
 
 local_rank = ngpus == 1 ? 0 : model.architecture.local_rank
-OUTPUT_DIR = "./reports/weakscaling_H100_timed/benchmark_$(ngpus)gpu"
+OUTPUT_DIR = "./reports/weakscaling_H100_timed_nogc/benchmark_$(ngpus)gpu"
 
 mkpath(OUTPUT_DIR)
 FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank)_timed.jld2")
-jldopen(FILE_PATH, "a") do file
+jldopen(FILE_PATH, "w") do file
     file["times/FFTstep"] = times_FFT
 end
 
@@ -218,8 +216,6 @@ for precond_name in preconditioners
     times = []
 
     for step in 1:nsteps
-        GC.gc()
-        CUDA.reclaim()
         t = @timed time_step!(model, Δt)
         push!(times, t)
         push!(cg_iters, model.pressure_solver.conjugate_gradient_solver.iteration)
