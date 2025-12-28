@@ -29,8 +29,7 @@ function parse_commandline()
 end
 
 args = parse_commandline()
-# solver_type = args["solver"]
-solver_type = "CG"
+solver_type = args["solver"]
 
 arch = GPU()
 
