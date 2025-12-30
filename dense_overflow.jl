@@ -77,11 +77,11 @@ grid = RectilinearGrid(arch, Float64,
 grid = ImmersedBoundaryGrid(grid, GridFittedBottom(bathymetry))
 
 #%%
-fig = Figure()
-ax = Axis(fig[1, 1]; title = "Bathymetry", xlabel = "x (m)", ylabel = "y (m)")
-hm = heatmap!(ax, xnodes(grid, Center()), ynodes(grid, Center()), interior(grid.immersed_boundary.bottom_height, :, :, 1), colormap=:plasma)
-Colorbar(fig[1, 2], hm; label = "Depth (m)")
-display(fig)
+# fig = Figure()
+# ax = Axis(fig[1, 1]; title = "Bathymetry", xlabel = "x (m)", ylabel = "y (m)")
+# hm = heatmap!(ax, xnodes(grid, Center()), ynodes(grid, Center()), interior(grid.immersed_boundary.bottom_height, :, :, 1), colormap=:plasma)
+# Colorbar(fig[1, 2], hm; label = "Depth (m)")
+# display(fig)
 #%%
 @inline h_inflow(xwall) = h₀ * exp(-xwall / Lρ)
 @inline compute_zstar(z, xwall) = (z - h_inflow(xwall) + hₑ) / h_inflow(xwall)
@@ -105,11 +105,11 @@ zstars = [compute_zstar.(z, xwall) for xwall in xwalls, z in zs]
 Fs = F.(zstars)
 
 #%%
-fig = Figure()
-ax = Axis(fig[1, 1]; title = "Inflow profile function F(z*)", xlabel = "x (m)", ylabel = "z (m)")
-hm = heatmap!(ax, xwalls, zs, Fs; colormap=:plasma)
-Colorbar(fig[1, 2], hm; label = "F(z*)")
-display(fig)
+# fig = Figure()
+# ax = Axis(fig[1, 1]; title = "Inflow profile function F(z*)", xlabel = "x (m)", ylabel = "z (m)")
+# hm = heatmap!(ax, xwalls, zs, Fs; colormap=:plasma)
+# Colorbar(fig[1, 2], hm; label = "F(z*)")
+# display(fig)
 #%%
 @inline u_quadratic_drag(x, y, t, u, v) = - Cd * u * sqrt(u^2 + v^2)
 @inline v_quadratic_drag(x, y, t, u, v) = - Cd * v * sqrt(u^2 + v^2)
