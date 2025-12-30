@@ -16,7 +16,7 @@ using CUDA
 using CairoMakie
 using NaNStatistics
 
-arch = CPU()
+arch = GPU()
 
 const Nx = 1536
 const Ny = 640
@@ -186,7 +186,7 @@ no_slip_bc = ValueBoundaryCondition(0)
 no_flux_bc = FluxBoundaryCondition(0)
 
 u_bcs = FieldBoundaryConditions(immersed=immersed_u_bc, top=no_slip_bc, bottom=u_quadratic_drag_bc, north=no_slip_bc, south=no_slip_bc)
-v_bcs = FieldBoundaryConditions(immersed=immersed_v_bc, top=no_slip_bc, bottom=v_quadratic_drag_bc, east=no_slip_bc, west=v_inflow_bc)
+v_bcs = FieldBoundaryConditions(immersed=immersed_v_bc, top=no_slip_bc, bottom=v_quadratic_drag_bc, east=no_slip_bc, west=no_slip_bc)
 w_bcs = FieldBoundaryConditions(immersed=no_slip_bc, north=no_slip_bc, south=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
 b_bcs = FieldBoundaryConditions(no_flux_bc)
 
