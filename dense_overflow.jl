@@ -78,7 +78,7 @@ grid = ImmersedBoundaryGrid(grid, GridFittedBottom(bathymetry))
 
 #%%
 # fig = Figure()
-# ax = Axis(fig[1, 1]; title = "Bathymetry", xlabel = "x (m)", ylabel = "y (m)")
+# ax = Axis(fig[1, 1]; title = "Bathymetry", xlabel = "x (m)", ylabel = "y (m)")myq
 # hm = heatmap!(ax, xnodes(grid, Center()), ynodes(grid, Center()), interior(grid.immersed_boundary.bottom_height, :, :, 1), colormap=:plasma)
 # Colorbar(fig[1, 2], hm; label = "Depth (m)")
 # display(fig)
@@ -223,7 +223,7 @@ time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
 simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(10))
 
 u, v, w = model.velocities
-c = model.tracers.c
+b, c = model.tracers.b, model.tracers.c
 
 d = CenterField(grid)
 
