@@ -140,8 +140,8 @@ end
 
 inflow_mask = GaussianMask{:y}(center = y₁, width = abs(y₁)/5)
 
-Δt = Δy / abs(U₀) / 5
-damping_rate = 1 / (Δt * 20)
+Δt = Δy / abs(U₀) / 10
+damping_rate = 1 / (Δt * 50)
 
 v_inflow_forcing = Relaxation(rate = damping_rate, 
                               target = v_inflow_profile, 
@@ -220,7 +220,7 @@ stop_time = 1day
 simulation = Simulation(model; Δt, stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
 
-simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(10))
+simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(1))
 
 u, v, w = model.velocities
 b, c = model.tracers.b, model.tracers.c
