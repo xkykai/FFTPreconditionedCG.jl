@@ -28,6 +28,10 @@ function parse_commandline()
         help = "Grid size in each direction (Nx = Nz = N)"
         arg_type = Int
         default = 1024
+      "--Ra"
+        help = "Rayleigh number"
+        arg_type = Float64
+        default = 1e8
     end
     return parse_args(s)
 end
