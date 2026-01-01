@@ -45,8 +45,10 @@ const Δb = (-α*ΔT + β*ΔS) * g
 
 const ν = sqrt(Δb * g * H^3 * Pr / Ra)
 const κ = ν / Pr
-const Lx = Lz = 1
-const Nx = Nz = 1024
+const Lx = 1
+const Lz = 1
+const Nx = 1024
+const Nz = 1024
 
 closure = ScalarDiffusivity(ν=ν, κ=κ)
 
@@ -145,7 +147,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 30
+stop_time = 100
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 5
@@ -210,16 +212,23 @@ Nu = Average(1 - wb / (κ * ∂b∂z), dims=(1, 2))
 Tbar = Average(T, dims=(1, 2))
 Sbar = Average(S, dims=(1, 2))
 bbar = Average(b, dims=(1, 2))
+KEbar = Average(0.5 * (u^2 + w^2), dims=(1, 2, 3))
 
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, pNHS = model.pressures.pNHS);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
-                                              schedule = TimeInterval(0.5),
+                                              schedule = TimeInterval(1),
                                               with_halos = true,
                                               overwrite_existing = true)
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(15, window=15),
+                                              schedule = AveragedTimeInterval(20, window=20),
+                                              with_halos = false,
+                                              overwrite_existing = true)
+
+simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
+                                              filename = joinpath(FILE_DIR, "KE_fields.jld2"),
+                                              schedule = AveragedTimeInterval(1, window=1),
                                               with_halos = false,
                                               overwrite_existing = true)
 
@@ -307,8 +316,18 @@ lines!(ax, Nuₙ, znodes(Nu_data.grid, Face()))
 display(fig)
 save("./$(FILE_DIR)/Nu_profile.png", fig)
 #%%
-# FFT_DIR = "./Data/rough_RB_seaiceformation_Ra_1.0e8_Pr_1_Nr_8_Lx_1_Lz_1_Nx_128_Nz_128_FFT"
-# CG_DIR = "./Data/rough_RB_seaiceformation_Ra_1.0e8_Pr_1_Nr_8_Lx_1_Lz_1_Nx_128_Nz_128_CG"
+KE_data = FieldTimeSeries("$(FILE_DIR)/KE_fields.jld2", "KE")
+Nt_averaged = length(KE_data.times)
+fig = Figure()
+ax = Axis(fig[1, 1], title="KE", xlabel="time", ylabel="KE")
+times_averaged = KE_data.times
+KE_values = interior(KE_data, 1, 1, 1, 1:Nt_averaged)
+lines!(ax, times_averaged, KE_values)
+display(fig)
+save("./$(FILE_DIR)/KE_with_time.png", fig)
+#%%
+# FFT_DIR = "./Data/rough_RB_seaiceformation_Ra_1.0e10_Pr_1_Nr_8_Lx_1_Lz_1_Nx_4096_Nz_4096_FFT"
+# CG_DIR = "./Data/rough_RB_seaiceformation_Ra_1.0e10_Pr_1_Nr_8_Lx_1_Lz_1_Nx_4096_Nz_4096_CG"
 
 # Nu_data_FFT = FieldTimeSeries("$(FFT_DIR)/averaged_fields.jld2", "Nu")
 # Nu_data_CG = FieldTimeSeries("$(CG_DIR)/averaged_fields.jld2", "Nu")
@@ -322,5 +341,5 @@ save("./$(FILE_DIR)/Nu_profile.png", fig)
 # lines!(ax, Nu_CG, znodes(Nu_data_CG.grid, Face()), color=:red, label="CG")
 # axislegend(ax, position=:rb)
 # display(fig)
-# save("./Output/Nu_profile_comparison_Ra_$(Ra).png", fig)
-# #%%
+# save("./Output/Nu_profile_comparison_Ra_$(Ra)_N_4096.png", fig)
+# # #%%
