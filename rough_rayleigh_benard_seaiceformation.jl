@@ -42,7 +42,7 @@ N = args["N"]
 
 arch = GPU()
 
-const Ra = 1e8
+const Ra = args["Ra"]
 const g = 1
 const α = 1
 const β = 4
