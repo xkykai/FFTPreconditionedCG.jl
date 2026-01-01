@@ -24,12 +24,17 @@ function parse_commandline()
         help = "Type of pressure solver to use (FFT or CG)"
         arg_type = String
         default = "FFT"
+      "--N"
+        help = "Grid size in each direction (Nx = Nz = N)"
+        arg_type = Int
+        default = 1024
     end
     return parse_args(s)
 end
 
 args = parse_commandline()
 solver_type = args["solver"]
+N = args["N"]
 
 arch = GPU()
 
@@ -47,8 +52,8 @@ const ν = sqrt(Δb * g * H^3 * Pr / Ra)
 const κ = ν / Pr
 const Lx = 1
 const Lz = 1
-const Nx = 1024
-const Nz = 1024
+const Nx = N
+const Nz = N
 
 closure = ScalarDiffusivity(ν=ν, κ=κ)
 
