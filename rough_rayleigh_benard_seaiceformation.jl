@@ -156,7 +156,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 200
+stop_time = 20000
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
@@ -164,7 +164,7 @@ diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 simulation = Simulation(model; Δt, stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05, max_Δt=diffusive_Δt / 2)
 
-simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(1))
+simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(10))
 
 u, v, w = model.velocities
 T, S, c = model.tracers.T, model.tracers.S, model.tracers.c
@@ -225,19 +225,19 @@ KEbar = Average(0.5 * (u^2 + w^2), dims=(1, 2, 3))
 
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, pNHS = model.pressures.pNHS);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
-                                              schedule = TimeInterval(1),
+                                              schedule = TimeInterval(100),
                                               with_halos = true,
                                               overwrite_existing = true)
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(20, window=20),
+                                              schedule = AveragedTimeInterval(1000, window=1000),
                                               with_halos = false,
                                               overwrite_existing = true)
 
 simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
                                               filename = joinpath(FILE_DIR, "KE_fields.jld2"),
-                                              schedule = AveragedTimeInterval(1, window=1),
+                                              schedule = AveragedTimeInterval(10, window=10),
                                               with_halos = false,
                                               overwrite_existing = true)
 
