@@ -162,9 +162,9 @@ diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
 
 simulation = Simulation(model; Δt, stop_time)
-time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05, max_Δt=diffusive_Δt / 2)
+time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05, max_Δt=diffusive_Δt / 5)
 
-simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(10))
+simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(1))
 
 u, v, w = model.velocities
 T, S, c = model.tracers.T, model.tracers.S, model.tracers.c
@@ -212,7 +212,7 @@ function progress(sim)
     return nothing
 end
 
-simulation.callbacks[:progress] = Callback(progress, IterationInterval(10))
+simulation.callbacks[:progress] = Callback(progress, IterationInterval(100))
 
 wb = Field(w * b)
 ∂b∂z = α * (T_top - T_bottom) / Lz - β * (S_top - S_bottom) / Lz
