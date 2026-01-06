@@ -150,7 +150,7 @@ set!(model, b=bᵢ)
 
 stop_time = 5days
 
-Δt = min(advective_Δt, diffusive_Δt) / 5
+Δt = advective_Δt / 5
 
 simulation = Simulation(model; Δt, stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
