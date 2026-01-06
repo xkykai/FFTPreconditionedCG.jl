@@ -89,7 +89,7 @@ immersed_u_bc = FluxBoundaryCondition(u_quadratic_drag, field_dependencies=(:u, 
 immersed_v_bc = FluxBoundaryCondition(v_quadratic_drag, field_dependencies=(:u, :v))
 
 advective_Δt = sqrt(Δz / Δb₀)
-τ = advective_Δt * 10
+const τ = advective_Δt * 10
 
 @inline function b_inflow_profile(i, k, grid, clock, model_fields)
     @inbounds x = xnode(i, grid, Center())
