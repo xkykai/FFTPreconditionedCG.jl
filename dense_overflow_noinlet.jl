@@ -50,8 +50,6 @@ const N = 2.3e-3
 const f₀ = 1e-4
 const tanα = 0.01
 const Cd = 2e-3
-const κ = 1e-5
-const ν = 1e-5
 
 function bathymetry(x, y)
     return -hₑ + y * tanα
@@ -90,14 +88,16 @@ v_quadratic_bottom_drag_bc = FluxBoundaryCondition(v_quadratic_bottom_drag, fiel
 immersed_u_bc = FluxBoundaryCondition(u_quadratic_drag, field_dependencies=(:u, :v))
 immersed_v_bc = FluxBoundaryCondition(v_quadratic_drag, field_dependencies=(:u, :v))
 
+advective_Δt = sqrt(Δz / Δb₀)
+τ = advective_Δt * 10
+
 @inline function b_inflow_profile(i, k, grid, clock, model_fields)
     @inbounds x = xnode(i, grid, Center())
     @inbounds z = znode(k, grid, Center())
     within_zone = (x >= -Wₑ / 2) & (x <= Wₑ / 2) & (z >= -hₑ)
     @inbounds b = model_fields.b[i, Ny, k]
     Δb = (b₀ - Δb₀) - b
-    ∂b∂y = Δb / Δy
-    return ifelse(within_zone, -κ * ∂b∂y * 100, 0)
+    return ifelse(within_zone, -Δb * Δy / τ, 0)
 end
 
 @inline function c_inflow_profile(i, k, grid, clock, model_fields)
@@ -106,15 +106,11 @@ end
     within_zone = (x >= -Wₑ / 2) & (x <= Wₑ / 2) & (z >= -hₑ)
     @inbounds c = model_fields.c[i, Ny, k]
     Δc = 1 - c
-    ∂c∂y = Δc / Δy
-    return ifelse(within_zone, -κ * ∂c∂y * 100, 0)
+    return ifelse(within_zone, -Δc * Δy / τ, 0)
 end
 
 b_inflow_bc = FluxBoundaryCondition(b_inflow_profile, discrete_form=true)
 c_inflow_bc = FluxBoundaryCondition(c_inflow_profile, discrete_form=true)
-
-advective_Δt = sqrt(Δb₀ * Δz)
-diffusive_Δt = min(Δy, Δz)^2 / max(κ, ν)
 
 no_slip_bc = ValueBoundaryCondition(0)
 no_flux_bc = FluxBoundaryCondition(0)
@@ -134,7 +130,6 @@ pressure_solver_str = "CG"
 # pressure_solver_str = "FFT"
 #%%
 coriolis = FPlane(f₀)
-closure = ScalarDiffusivity(ν=ν, κ=κ)
 #%%
 filename = "dense_overflow_noinlet_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)"
 
@@ -146,8 +141,7 @@ model = NonhydrostaticModel(; grid, pressure_solver,
                               tracers = (:b, :c),
                               coriolis,
                               buoyancy = BuoyancyTracer(),
-                              boundary_conditions,
-                              closure)
+                              boundary_conditions)
 #%%
 @inline b_background(x, y, z, t) = N^2 * z
 bᵢ(x, y, z) = b_background(x, y, z, nothing) + rand() * 1e-5 * abs(N^2 * Δz)
@@ -159,7 +153,7 @@ stop_time = 5days
 Δt = min(advective_Δt, diffusive_Δt) / 5
 
 simulation = Simulation(model; Δt, stop_time)
-time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05, max_Δt=advective_Δt / 2)
+time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
 
 simulation.callbacks[:wizard] = Callback(time_wizard, IterationInterval(1))
 
