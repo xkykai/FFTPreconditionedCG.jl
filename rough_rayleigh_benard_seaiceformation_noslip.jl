@@ -15,6 +15,7 @@ using CUDA
 using CairoMakie
 using NaNStatistics
 using ArgParse
+using Glob
 
 function parse_commandline()
     s = ArgParseSettings()
@@ -225,22 +226,30 @@ KEbar = Average(0.5 * (u^2 + w^2), dims=(1, 2, 3))
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, pNHS = model.pressures.pNHS);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
                                               schedule = TimeInterval(50),
-                                              with_halos = true,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
                                               schedule = AveragedTimeInterval(2500, window=2500),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
                                               filename = joinpath(FILE_DIR, "KE_fields.jld2"),
                                               schedule = AveragedTimeInterval(50, window=50),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
-run!(simulation)
+simulation.output_writers[:checkpoint] = Checkpointer(simulation;
+                                                      dir = FILE_DIR,
+                                                      schedule = TimeInterval(500))
+
+checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
+if !isempty(checkpoint_files)
+    @info "Found checkpoint files, resuming from checkpoint"
+    run!(simulation, pickup=true)
+else
+    @info "No checkpoint files found, starting fresh simulation"
+    run!(simulation)
+end
 #%%
 u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u")
 w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
