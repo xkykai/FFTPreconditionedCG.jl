@@ -11,6 +11,7 @@ CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+Glob = "c27321d9-0574-5035-807b-f59d2c89b15c"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
@@ -25,6 +26,7 @@ ArgParse = "1.2.0"
 BenchmarkTools = "1.6.3"
 CSV = "0.10.15"
 DataFrames = "1.8.1"
+Glob = "1.4.0"
 JLD2 = "0.5.13"
 KernelAbstractions = "0.9.39"
 MPI = "0.20.23"
@@ -35,6 +37,7 @@ Oceananigans = "0.102.5"
 Roots = "2.2.10"
 
 [extras]
+CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
