@@ -170,7 +170,7 @@ outlet_area = Field(Integral(west_wall_field))
 
 const U₀_out = abs(Array(interior(inlet_mass_flux_total, 1, 1, 1))[1] / Array(interior(outlet_area, 1, 1, 1))[1])
 
-u_outlet(y, z) = -U₀_out
+u_outlet(y, z, t) = -U₀_out
 #%%
 # fig = Figure()
 # ax = Axis(fig[1, 1]; title = "West outlet area field", xlabel = "y (m)", ylabel = "z (m)")
