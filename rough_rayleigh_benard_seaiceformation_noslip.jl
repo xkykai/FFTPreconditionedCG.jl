@@ -15,6 +15,7 @@ using CUDA
 using CairoMakie
 using NaNStatistics
 using ArgParse
+using Glob
 
 function parse_commandline()
     s = ArgParseSettings()
@@ -108,7 +109,7 @@ elseif solver_type == "CG"
     pressure_solver_str = solver_type
 end
 
-filename = "rough_RB_seaiceformation_noslip_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
+filename = "rough_RB_seaiceformation_noslip_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)_2"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -155,7 +156,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 20000
+stop_time = 5000
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
@@ -224,23 +225,31 @@ KEbar = Average(0.5 * (u^2 + w^2), dims=(1, 2, 3))
 
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, pNHS = model.pressures.pNHS);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
-                                              schedule = TimeInterval(100),
-                                              with_halos = true,
-                                              overwrite_existing = true)
+                                              schedule = TimeInterval(50),
+                                              with_halos = true)
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(1000, window=1000),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              schedule = AveragedTimeInterval(2500, window=2500),
+                                              with_halos = true)
 
 simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
                                               filename = joinpath(FILE_DIR, "KE_fields.jld2"),
-                                              schedule = AveragedTimeInterval(10, window=10),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              schedule = AveragedTimeInterval(50, window=50),
+                                              with_halos = true)
 
-run!(simulation)
+simulation.output_writers[:checkpoint] = Checkpointer(simulation;
+                                                      dir = FILE_DIR,
+                                                      schedule = TimeInterval(500))
+
+checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
+if !isempty(checkpoint_files)
+    @info "Found checkpoint files, resuming from checkpoint"
+    run!(simulation, pickup=true)
+else
+    @info "No checkpoint files found, starting fresh simulation"
+    run!(simulation)
+end
 #%%
 u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u")
 w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
