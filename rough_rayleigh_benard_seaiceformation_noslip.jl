@@ -238,7 +238,7 @@ simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
                                               schedule = AveragedTimeInterval(50, window=50),
                                               with_halos = true)
 
-simulation.output_writers[:checkpoint] = Checkpointer(simulation;
+simulation.output_writers[:checkpoint] = Checkpointer(model;
                                                       dir = FILE_DIR,
                                                       schedule = TimeInterval(500))
 
