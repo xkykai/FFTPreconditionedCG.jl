@@ -224,7 +224,8 @@ pressure_solver_str = "CG"
 #%%
 coriolis = FPlane(f₀)
 #%%
-filename = "dense_overflow_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)"
+simulation_length = 14
+filename = "dense_overflow_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)_$(simulation_length)days"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -241,7 +242,7 @@ bᵢ(x, y, z) = b_background(x, y, z, nothing) + rand() * 1e-5 * abs(N^2 * Lz)
 
 set!(model, b=bᵢ)
 
-stop_time = 1day
+stop_time = simulation_length * day
 Δt = Δy / abs(U₀) / 10
 simulation = Simulation(model; Δt, stop_time)
 time_wizard = TimeStepWizard(cfl=0.6, max_change=1.05)
@@ -303,69 +304,19 @@ simulation.callbacks[:progress] = Callback(progress, IterationInterval(1))
 
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, v, w, b, c);
                                               filename = "$(FILE_DIR)/instantaneous_fields.jld2",
-                                              schedule = TimeInterval(6hours),
+                                              schedule = TimeInterval(1day),
                                               with_halos = true,
                                               overwrite_existing = true)
 
-run!(simulation)
-# #%%
-# u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u")
-# v_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "v")
-# w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
-# b_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "b")
-# c_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "c")
-# #%%
-# times = u_data.times
-# Nt = length(times)
+simulation.output_writers[:checkpoint] = Checkpointer(model;
+                                                      dir = FILE_DIR,
+                                                      schedule = TimeInterval(2days))
 
-# xC = xnodes(u_data.grid, Center())
-# yC = ynodes(u_data.grid, Center())
-# zC = znodes(u_data.grid, Center())
-# xF = xnodes(u_data.grid, Face())
-# yF = ynodes(u_data.grid, Face())
-# zF = znodes(u_data.grid, Face())
-
-# for i in 1:Nt
-#     mask_immersed_field!(u_data[i], NaN)
-#     mask_immersed_field!(v_data[i], NaN)
-#     mask_immersed_field!(w_data[i], NaN)
-#     mask_immersed_field!(b_data[i], NaN)
-#     mask_immersed_field!(c_data[i], NaN)
-# end
-# #%%
-# fig = Figure(size=(1000, 1000), fontsize=20)
-# ax = Axis(fig[1, 1]; title = "c", xlabel = "x (m)", ylabel = "y (m)")
-
-# slider = Slider(fig[2, :]; range = 1:length(zC), startvalue = length(zC))
-
-# n = slider.value
-
-# cₙ = @lift interior(c_data[Nt], :, :, $n)
-
-# clim = @lift (-nanmaximum(abs.($cₙ)), nanmaximum(abs.($cₙ)))
-
-# label_str = @lift "z = $(round(zC[$n]; digits=1)) m"
-# Label(fig[0, :], label_str, tellwidth=false)
-
-# hm = heatmap!(ax, xC, yC, cₙ, colorrange = clim, colormap=:balance)
-# Colorbar(fig[1, 2], hm; label = "c")
-# display(fig)
-# #%%
-# fig = Figure(size=(1000, 1000), fontsize=20)
-# ax = Axis(fig[1, 1]; title = "v", xlabel = "x (m)", ylabel = "z (m)")
-
-# slider = Slider(fig[2, :]; range = 1:length(zC), startvalue = length(zC))
-
-# n = slider.value
-
-# vₙ = @lift interior(v_data[Nt], :, 1:length(yF)-1, $n)
-
-# clim = @lift (-nanmaximum(abs.($vₙ)), nanmaximum(abs.($vₙ)))
-
-# label_str = @lift "z = $(round(zC[$n]; digits=1)) m"
-# Label(fig[0, :], label_str, tellwidth=false)
-
-# hm = heatmap!(ax, xC, yF, vₙ, colorrange = clim, colormap=:balance)
-# Colorbar(fig[1, 2], hm; label = "v")
-# display(fig)
-# #%%
+checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
+if !isempty(checkpoint_files)
+    @info "Found checkpoint files, resuming from checkpoint"
+    run!(simulation, pickup=true)
+else
+    @info "No checkpoint files found, starting fresh simulation"
+    run!(simulation)
+end
