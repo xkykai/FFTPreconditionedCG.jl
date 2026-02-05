@@ -13,9 +13,8 @@ using Oceananigans.Operators
 using KernelAbstractions: @kernel, @index
 using Statistics
 using CUDA
-using CairoMakie
-# using GLMakie
 using NaNStatistics
+using Glob
 
 arch = GPU()
 # arch = CPU()
