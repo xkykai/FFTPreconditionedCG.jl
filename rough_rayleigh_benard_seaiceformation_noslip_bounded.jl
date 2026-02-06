@@ -108,7 +108,7 @@ elseif solver_type == "CG"
     pressure_solver_str = solver_type
 end
 
-filename = "rough_RB_seaiceformation_noslip_bounded_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)_2"
+filename = "rough_RB_seaiceformation_noslip_bounded_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
