@@ -86,7 +86,7 @@ grid = RectilinearGrid(arch, Float64,
                         z = (0, Lz),
                         topology = (Periodic, Flat, Bounded))
 
-const Nr = 8 # number of roughness elements
+const Nr = 16 # number of roughness elements
 const hx = Lx / Nr / 2
 const x₀s = hx:2hx:Lx-hx
 

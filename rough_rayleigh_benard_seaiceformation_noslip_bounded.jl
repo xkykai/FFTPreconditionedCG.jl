@@ -85,7 +85,7 @@ grid = RectilinearGrid(arch, Float64,
                         z = (0, Lz),
                         topology = (Bounded, Flat, Bounded))
 
-const Nr = 8 # number of roughness elements
+const Nr = 16 # number of roughness elements
 const hx = Lx / Nr / 2
 const x₀s = hx:2hx:Lx-hx
 
@@ -240,7 +240,18 @@ simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
                                               with_halos = false,
                                               overwrite_existing = true)
 
-run!(simulation)
+simulation.output_writers[:checkpoint] = Checkpointer(model;
+                                                      dir = FILE_DIR,
+                                                      schedule = TimeInterval(500))
+
+checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
+if !isempty(checkpoint_files)
+    @info "Found checkpoint files, resuming from checkpoint"
+    run!(simulation, pickup=true)
+else
+    @info "No checkpoint files found, starting fresh simulation"
+    run!(simulation)
+end
 #%%
 u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u")
 w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
