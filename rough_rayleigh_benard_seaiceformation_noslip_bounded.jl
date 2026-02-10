@@ -155,7 +155,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 5000
+stop_time = 2000
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
@@ -232,7 +232,7 @@ simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, p);
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(2500, window=2500),
+                                              schedule = AveragedTimeInterval(1000, window=1000),
                                               with_halos = false,
                                               overwrite_existing = true)
 
