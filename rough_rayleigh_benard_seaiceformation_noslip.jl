@@ -223,7 +223,9 @@ Sbar = Average(S, dims=(1, 2))
 bbar = Average(b, dims=(1, 2))
 KEbar = Average(0.5 * (u^2 + w^2), dims=(1, 2, 3))
 
-simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, pNHS = model.pressures.pNHS);
+p = model.pressures.pNHS + model.pressures.pHY′
+
+simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, p);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
                                               schedule = TimeInterval(50),
                                               with_halos = true)
@@ -264,7 +266,7 @@ w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
 T_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "T")
 S_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "S")
 d_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "d")
-p_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "pNHS")
+p_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "p")
 
 Nt = length(u_data.times)
 times = u_data.times
