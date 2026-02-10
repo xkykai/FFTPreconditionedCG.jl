@@ -252,6 +252,14 @@ else
     @info "No checkpoint files found, starting fresh simulation"
     run!(simulation)
 end
+
+checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
+if !isempty(checkpoint_files)
+    @info "Simulation completed successfully, removing $(length(checkpoint_files)) checkpoint file(s)"
+    for f in checkpoint_files
+        rm(f)
+    end
+end
 #%%
 u_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "u")
 w_data = FieldTimeSeries("$(FILE_DIR)/instantaneous_fields.jld2", "w")
