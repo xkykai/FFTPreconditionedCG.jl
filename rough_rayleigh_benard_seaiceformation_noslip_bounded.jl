@@ -15,6 +15,7 @@ using CUDA
 using CairoMakie
 using NaNStatistics
 using ArgParse
+using Glob
 
 function parse_commandline()
     s = ArgParseSettings()
