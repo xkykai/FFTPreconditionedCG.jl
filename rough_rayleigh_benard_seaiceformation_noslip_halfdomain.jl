@@ -74,11 +74,11 @@ buoyancy = SeawaterBuoyancy(; gravitational_acceleration=g, equation_of_state)
 ##### Model setup
 #####
 
-@inline function local_roughness_top(η, η₀, h)
-    if η > η₀ - h && η <= η₀
-        return -η - h + η₀
-    elseif η > η₀ && η <= η₀ + h
-        return η - h - η₀
+@inline function local_roughness_top(η, η₀, half_width, h_element)
+    if η > η₀ - half_width && η <= η₀
+        return h_element / half_width * (η₀ - half_width - η)
+    elseif η > η₀ && η <= η₀ + half_width
+        return h_element / half_width * (η - η₀ - half_width)
     else
         return 0
     end
@@ -96,8 +96,7 @@ const x₀s = hx:2hx:Lx-hx
 const h_element = Lx / 2
 
 @inline function roughness_top(x, z)
-    # z_rough_x = sum([local_roughness_top(x, x₀, hx) for x₀ in x₀s])
-    z_rough_x = sum([local_roughness_top(x, x₀, h_element) for x₀ in x₀s])
+    z_rough_x = sum([local_roughness_top(x, x₀, hx, h_element) for x₀ in x₀s])
 
     return z >= z_rough_x + Lz
 end
