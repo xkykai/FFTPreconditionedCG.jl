@@ -110,7 +110,7 @@ if solver_type == "FFT"
 elseif solver_type == "CG"
     reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
     preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
-    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=100; preconditioner)
+    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=40; preconditioner)
     pressure_solver_str = solver_type
 end
 
@@ -161,7 +161,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 2000
+stop_time = 1000
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
@@ -238,7 +238,7 @@ simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, p);
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(1000, window=1000),
+                                              schedule = AveragedTimeInterval(1000, window=500),
                                               with_halos = false,
                                               overwrite_existing = true)
 
@@ -250,7 +250,7 @@ simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
 
 simulation.output_writers[:checkpoint] = Checkpointer(model;
                                                       dir = FILE_DIR,
-                                                      schedule = TimeInterval(500))
+                                                      schedule = TimeInterval(100))
 
 checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
 if !isempty(checkpoint_files)
