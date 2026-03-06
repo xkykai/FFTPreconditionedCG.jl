@@ -33,6 +33,10 @@ function parse_commandline()
         help = "Rayleigh number"
         arg_type = Float64
         default = 1e8
+      "--Nr"
+        help = "Number of roughness elements"
+        arg_type = Int
+        default = 16
     end
     return parse_args(s)
 end
@@ -44,6 +48,7 @@ N = args["N"]
 arch = GPU()
 
 const Ra = args["Ra"]
+const Nr = args["Nr"]
 const g = 1
 const α = 1
 const β = 4
@@ -69,11 +74,11 @@ buoyancy = SeawaterBuoyancy(; gravitational_acceleration=g, equation_of_state)
 ##### Model setup
 #####
 
-@inline function local_roughness_top(η, η₀, h)
-    if η > η₀ - h && η <= η₀
-        return -η - h + η₀
-    elseif η > η₀ && η <= η₀ + h
-        return η - h - η₀
+@inline function local_roughness_top(η, η₀, half_width, h_element)
+    if η > η₀ - half_width && η <= η₀
+        return h_element / half_width * (η₀ - half_width - η)
+    elseif η > η₀ && η <= η₀ + half_width
+        return h_element / half_width * (η - η₀ - half_width)
     else
         return 0
     end
@@ -84,14 +89,14 @@ grid = RectilinearGrid(arch, Float64,
                         halo = (6, 6),
                         x = (0, Lx),
                         z = (0, Lz),
-                        topology = (Bounded, Flat, Bounded))
+                        topology = (Periodic, Flat, Bounded))
 
-const Nr = 16 # number of roughness elements
 const hx = Lx / Nr / 2
 const x₀s = hx:2hx:Lx-hx
+const h_element = Lx / 2
 
 @inline function roughness_top(x, z)
-    z_rough_x = sum([local_roughness_top(x, x₀, hx) for x₀ in x₀s])
+    z_rough_x = sum([local_roughness_top(x, x₀, hx, h_element) for x₀ in x₀s])
 
     return z >= z_rough_x + Lz
 end
@@ -109,7 +114,7 @@ elseif solver_type == "CG"
     pressure_solver_str = solver_type
 end
 
-filename = "rough_RB_seaiceformation_noslip_bounded_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
+filename = "rough_RB_seaiceformation_noslip_halfdomain_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -121,20 +126,20 @@ const S_top = 1
 const S_bottom = 0
 
 @inline function rayleigh_benard_T(x, z, t)
-    above_centerline = z > 1 / 2
+    above_centerline = z >= 1 / 2
     return ifelse(above_centerline, T_top, T_bottom)
 end
 
 @inline function rayleigh_benard_S(x, z, t)
-    above_centerline = z > 1 / 2
+    above_centerline = z >= 1 / 2
     return ifelse(above_centerline, S_top, S_bottom)
 end
 
 no_slip_bc = ValueBoundaryCondition(0)
 
 u_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
-v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
-w_bcs = FieldBoundaryConditions(immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
+w_bcs = FieldBoundaryConditions(immersed=no_slip_bc)
 
 T_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(T_top), bottom=ValueBoundaryCondition(T_bottom),
                                 immersed=ValueBoundaryCondition(rayleigh_benard_T))
@@ -228,20 +233,17 @@ p = model.pressures.pNHS + model.pressures.pHY′
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, p);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
                                               schedule = TimeInterval(50),
-                                              with_halos = true,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
                                               schedule = AveragedTimeInterval(1000, window=1000),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
                                               filename = joinpath(FILE_DIR, "KE_fields.jld2"),
                                               schedule = AveragedTimeInterval(50, window=50),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:checkpoint] = Checkpointer(model;
                                                       dir = FILE_DIR,
