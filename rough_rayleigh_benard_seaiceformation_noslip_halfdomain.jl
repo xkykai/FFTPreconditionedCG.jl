@@ -110,7 +110,7 @@ if solver_type == "FFT"
 elseif solver_type == "CG"
     reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
     preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
-    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=100; preconditioner)
+    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=40; preconditioner)
     pressure_solver_str = solver_type
 end
 
@@ -161,7 +161,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 2000
+stop_time = 1000
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
