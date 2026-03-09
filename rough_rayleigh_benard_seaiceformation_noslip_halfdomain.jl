@@ -37,6 +37,10 @@ function parse_commandline()
         help = "Number of roughness elements"
         arg_type = Int
         default = 16
+      "--topology"
+        help = "Grid topology (bounded or periodic)"
+        arg_type = String
+        default = "bounded"
     end
     return parse_args(s)
 end
@@ -65,6 +69,13 @@ const Lz = 1
 const Nx = N
 const Nz = N
 
+topology_type = args["topology"]
+if topology_type == "bounded"
+    topology = (Bounded, Flat, Bounded)
+else
+    topology = (Periodic, Flat, Bounded)
+end
+
 closure = ScalarDiffusivity(ν=ν, κ=κ)
 
 equation_of_state = LinearEquationOfState(thermal_expansion=α, haline_contraction=β)
@@ -89,7 +100,7 @@ grid = RectilinearGrid(arch, Float64,
                         halo = (6, 6),
                         x = (0, Lx),
                         z = (0, Lz),
-                        topology = (Periodic, Flat, Bounded))
+                        topology = topology)
 
 const hx = Lx / Nr / 2
 const x₀s = hx:2hx:Lx-hx
@@ -114,7 +125,7 @@ elseif solver_type == "CG"
     pressure_solver_str = solver_type
 end
 
-filename = "rough_RB_seaiceformation_noslip_halfdomain_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
+filename = "rough_RB_seaiceformation_noslip_$(topology_type)_halfdomain_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -126,20 +137,20 @@ const S_top = 1
 const S_bottom = 0
 
 @inline function rayleigh_benard_T(x, z, t)
-    above_centerline = z >= 1 / 2
+    above_centerline = z > 1 / 2
     return ifelse(above_centerline, T_top, T_bottom)
 end
 
 @inline function rayleigh_benard_S(x, z, t)
-    above_centerline = z >= 1 / 2
+    above_centerline = z > 1 / 2
     return ifelse(above_centerline, S_top, S_bottom)
 end
 
 no_slip_bc = ValueBoundaryCondition(0)
 
 u_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
-v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
-w_bcs = FieldBoundaryConditions(immersed=no_slip_bc)
+v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+w_bcs = FieldBoundaryConditions(immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
 
 T_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(T_top), bottom=ValueBoundaryCondition(T_bottom),
                                 immersed=ValueBoundaryCondition(rayleigh_benard_T))
@@ -237,7 +248,7 @@ simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, p);
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(1000, window=1000),
+                                              schedule = AveragedTimeInterval(1000, window=500),
                                               with_halos = true)
 
 simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
@@ -247,7 +258,7 @@ simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
 
 simulation.output_writers[:checkpoint] = Checkpointer(model;
                                                       dir = FILE_DIR,
-                                                      schedule = TimeInterval(500))
+                                                      schedule = TimeInterval(50))
 
 checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
 if !isempty(checkpoint_files)
