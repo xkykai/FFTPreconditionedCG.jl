@@ -121,7 +121,7 @@ if solver_type == "FFT"
 elseif solver_type == "CG"
     reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
     preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
-    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=40; preconditioner)
+    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=80; preconditioner)
     pressure_solver_str = solver_type
 end
 
@@ -149,8 +149,14 @@ end
 no_slip_bc = ValueBoundaryCondition(0)
 
 u_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
-v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
-w_bcs = FieldBoundaryConditions(immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+if topology_type == "bounded"
+    v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+    w_bcs = FieldBoundaryConditions(immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+else
+    v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
+    w_bcs = FieldBoundaryConditions(immersed=no_slip_bc)
+end
+
 
 T_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(T_top), bottom=ValueBoundaryCondition(T_bottom),
                                 immersed=ValueBoundaryCondition(rayleigh_benard_T))
@@ -172,7 +178,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 1000
+stop_time = 1001
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
