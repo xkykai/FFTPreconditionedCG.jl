@@ -304,12 +304,11 @@ simulation.callbacks[:progress] = Callback(progress, IterationInterval(1))
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, v, w, b, c);
                                               filename = "$(FILE_DIR)/instantaneous_fields.jld2",
                                               schedule = TimeInterval(1day),
-                                              with_halos = true,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:checkpoint] = Checkpointer(model;
                                                       dir = FILE_DIR,
-                                                      schedule = TimeInterval(2days))
+                                                      schedule = TimeInterval(1days))
 
 checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
 if !isempty(checkpoint_files)
