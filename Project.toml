@@ -33,7 +33,7 @@ MPI = "0.20.23"
 Makie = "0.24.7"
 NVTX = "1.0.1"
 NaNStatistics = "0.6.54"
-Oceananigans = "0.102.5"
+Oceananigans = "0.106"
 Roots = "2.2.10"
 
 [extras]
