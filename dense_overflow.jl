@@ -221,7 +221,7 @@ pressure_solver_str = "CG"
 # pressure_solver = nothing
 # pressure_solver_str = "FFT"
 #%%
-coriolis = FPlane(f₀)
+coriolis = FPlane(; f= f₀)
 #%%
 simulation_length = 14
 filename = "dense_overflow_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)_$(simulation_length)days"
