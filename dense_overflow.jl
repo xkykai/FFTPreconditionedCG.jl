@@ -229,12 +229,12 @@ filename = "dense_overflow_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)_$(s
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
 
-model = NonhydrostaticModel(; grid, pressure_solver,
-                              advection = WENO(order=9),
-                              tracers = (:b, :c),
-                              coriolis,
-                              buoyancy = BuoyancyTracer(),
-                              boundary_conditions)
+model = NonhydrostaticModel(grid; pressure_solver,
+                            advection = WENO(order=9),
+                            tracers = (:b, :c),
+                            coriolis,
+                            buoyancy = BuoyancyTracer(),
+                            boundary_conditions)
 #%%
 @inline b_background(x, y, z, t) = b₀ + N^2 * z
 bᵢ(x, y, z) = b_background(x, y, z, nothing) + rand() * 1e-5 * abs(N^2 * Lz)

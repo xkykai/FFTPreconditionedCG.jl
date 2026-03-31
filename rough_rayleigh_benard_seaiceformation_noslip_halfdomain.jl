@@ -165,12 +165,12 @@ S_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(S_top), bottom=ValueB
 
 boundary_conditions = (u=u_bcs, v=v_bcs, w=w_bcs, T=T_bcs, S=S_bcs)
 
-model = NonhydrostaticModel(; grid, pressure_solver,
-                              advection = Centered(),
-                              closure,
-                              tracers = (:T, :S, :c),
-                              buoyancy,
-                              boundary_conditions)
+model = NonhydrostaticModel(grid; pressure_solver,
+                            advection = Centered(),
+                            closure,
+                            tracers = (:T, :S, :c),
+                            buoyancy,
+                            boundary_conditions)
 
 Tᵢ(x, z) = T_bottom + rand() * 1e-5
 Sᵢ(x, z) = S_bottom + rand() * 1e-5
