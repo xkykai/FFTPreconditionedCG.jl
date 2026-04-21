@@ -53,6 +53,11 @@ const tanα = 0.01
 const h₀ = 300
 const Lρ = sqrt(Δb₀ * h₀) / f₀
 const Cd = 2e-3
+# Biharmonic coefficients sized so the 2Δ (Nyquist) wave decays on τ_2Δ ≈ 100 s
+# (a few Δt at Δt ≈ 30s). Inverting τ_2Δ = Δ⁴ / (π⁴ · ν₄) gives ν₄ = Δ⁴ / (π⁴ · τ_2Δ),
+# which sits ~40–50× below the explicit stability limit ν₄ < Δ⁴ / (8 · Δt).
+const ν₄h = 5e6  # m⁴/s, horizontal: 500⁴ / (π⁴ · 100)
+const ν₄z = 8e1  # m⁴/s, vertical:    30⁴ / (π⁴ · 100)
 
 function bathymetry(x, y)
     if y <= 0
@@ -224,15 +229,20 @@ pressure_solver_str = "CG"
 coriolis = FPlane(; f= f₀)
 #%%
 simulation_length = 14
-filename = "dense_overflow_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)_$(simulation_length)days"
+filename = "dense_overflow_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)_nu4h_$(ν₄h)_nu4z_$(ν₄z)_$(simulation_length)days"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
+
+horizontal_biharmonic = HorizontalScalarBiharmonicDiffusivity(ν=ν₄h, κ=(b=ν₄h, c=ν₄h))
+vertical_biharmonic   = VerticalScalarBiharmonicDiffusivity(  ν=ν₄z, κ=(b=ν₄z, c=ν₄z))
+closure = (horizontal_biharmonic, vertical_biharmonic)
 
 model = NonhydrostaticModel(grid; pressure_solver,
                             advection = WENO(order=9),
                             tracers = (:b, :c),
                             coriolis,
+                            closure,
                             buoyancy = BuoyancyTracer(),
                             boundary_conditions)
 #%%
