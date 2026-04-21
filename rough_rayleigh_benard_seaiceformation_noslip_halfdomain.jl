@@ -33,6 +33,14 @@ function parse_commandline()
         help = "Rayleigh number"
         arg_type = Float64
         default = 1e8
+      "--Nr"
+        help = "Number of roughness elements"
+        arg_type = Int
+        default = 16
+      "--topology"
+        help = "Grid topology (bounded or periodic)"
+        arg_type = String
+        default = "bounded"
     end
     return parse_args(s)
 end
@@ -44,6 +52,7 @@ N = args["N"]
 arch = GPU()
 
 const Ra = args["Ra"]
+const Nr = args["Nr"]
 const g = 1
 const α = 1
 const β = 4
@@ -60,6 +69,13 @@ const Lz = 1
 const Nx = N
 const Nz = N
 
+topology_type = args["topology"]
+if topology_type == "bounded"
+    topology = (Bounded, Flat, Bounded)
+else
+    topology = (Periodic, Flat, Bounded)
+end
+
 closure = ScalarDiffusivity(ν=ν, κ=κ)
 
 equation_of_state = LinearEquationOfState(thermal_expansion=α, haline_contraction=β)
@@ -69,11 +85,11 @@ buoyancy = SeawaterBuoyancy(; gravitational_acceleration=g, equation_of_state)
 ##### Model setup
 #####
 
-@inline function local_roughness_top(η, η₀, h)
-    if η > η₀ - h && η <= η₀
-        return -η - h + η₀
-    elseif η > η₀ && η <= η₀ + h
-        return η - h - η₀
+@inline function local_roughness_top(η, η₀, half_width, h_element)
+    if η > η₀ - half_width && η <= η₀
+        return h_element / half_width * (η₀ - half_width - η)
+    elseif η > η₀ && η <= η₀ + half_width
+        return h_element / half_width * (η - η₀ - half_width)
     else
         return 0
     end
@@ -84,14 +100,14 @@ grid = RectilinearGrid(arch, Float64,
                         halo = (6, 6),
                         x = (0, Lx),
                         z = (0, Lz),
-                        topology = (Bounded, Flat, Bounded))
+                        topology = topology)
 
-const Nr = 16 # number of roughness elements
 const hx = Lx / Nr / 2
 const x₀s = hx:2hx:Lx-hx
+const h_element = Lx / 2
 
 @inline function roughness_top(x, z)
-    z_rough_x = sum([local_roughness_top(x, x₀, hx) for x₀ in x₀s])
+    z_rough_x = sum([local_roughness_top(x, x₀, hx, h_element) for x₀ in x₀s])
 
     return z >= z_rough_x + Lz
 end
@@ -105,11 +121,11 @@ if solver_type == "FFT"
 elseif solver_type == "CG"
     reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
     preconditioner = FFTBasedPoissonSolver(reduced_precision_grid)
-    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=100; preconditioner)
+    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=80; preconditioner)
     pressure_solver_str = solver_type
 end
 
-filename = "rough_RB_seaiceformation_noslip_bounded_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
+filename = "rough_RB_seaiceformation_noslip_$(topology_type)_halfdomain_Ra_$(Ra)_Pr_$(Pr)_Nr_$(Nr)_Lx_$(Lx)_Lz_$(Lz)_Nx_$(Nx)_Nz_$(Nz)_$(pressure_solver_str)"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -133,8 +149,14 @@ end
 no_slip_bc = ValueBoundaryCondition(0)
 
 u_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
-v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
-w_bcs = FieldBoundaryConditions(immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+if topology_type == "bounded"
+    v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+    w_bcs = FieldBoundaryConditions(immersed=no_slip_bc, east=no_slip_bc, west=no_slip_bc)
+else
+    v_bcs = FieldBoundaryConditions(top=no_slip_bc, bottom=no_slip_bc, immersed=no_slip_bc)
+    w_bcs = FieldBoundaryConditions(immersed=no_slip_bc)
+end
+
 
 T_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(T_top), bottom=ValueBoundaryCondition(T_bottom),
                                 immersed=ValueBoundaryCondition(rayleigh_benard_T))
@@ -143,12 +165,12 @@ S_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(S_top), bottom=ValueB
 
 boundary_conditions = (u=u_bcs, v=v_bcs, w=w_bcs, T=T_bcs, S=S_bcs)
 
-model = NonhydrostaticModel(; grid, pressure_solver,
-                              advection = Centered(),
-                              closure,
-                              tracers = (:T, :S, :c),
-                              buoyancy,
-                              boundary_conditions)
+model = NonhydrostaticModel(grid; pressure_solver,
+                            advection = Centered(),
+                            closure,
+                            tracers = (:T, :S, :c),
+                            buoyancy,
+                            boundary_conditions)
 
 Tᵢ(x, z) = T_bottom + rand() * 1e-5
 Sᵢ(x, z) = S_bottom + rand() * 1e-5
@@ -156,7 +178,7 @@ c₁(x, z) = 1
 
 set!(model, T=Tᵢ, c=c₁, S=Sᵢ)
 
-stop_time = 2000
+stop_time = 1001
 advective_Δt = (Lz / Nz) / Δb
 diffusive_Δt = min((Lx / Nx)^2, Lz/Nz^2) / max(ν, κ)
 Δt = min(advective_Δt, diffusive_Δt) / 10
@@ -228,24 +250,21 @@ p = model.pressures.pNHS + model.pressures.pHY′
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, w, T, S, c, b, d, p);
                                               filename = joinpath(FILE_DIR, "instantaneous_fields.jld2"),
                                               schedule = TimeInterval(50),
-                                              with_halos = true,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:averaged] = JLD2Writer(model, (; T = Tbar, S = Sbar, b = bbar, Nu);
                                               filename = joinpath(FILE_DIR, "averaged_fields.jld2"),
-                                              schedule = AveragedTimeInterval(1000, window=1000),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              schedule = AveragedTimeInterval(1000, window=500),
+                                              with_halos = true)
 
 simulation.output_writers[:KE] = JLD2Writer(model, (; KE = KEbar);
                                               filename = joinpath(FILE_DIR, "KE_fields.jld2"),
                                               schedule = AveragedTimeInterval(50, window=50),
-                                              with_halos = false,
-                                              overwrite_existing = true)
+                                              with_halos = true)
 
 simulation.output_writers[:checkpoint] = Checkpointer(model;
                                                       dir = FILE_DIR,
-                                                      schedule = TimeInterval(500))
+                                                      schedule = TimeInterval(50))
 
 checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
 if !isempty(checkpoint_files)
