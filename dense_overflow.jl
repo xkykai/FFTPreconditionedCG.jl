@@ -184,7 +184,7 @@ u_outlet(y, z, t) = -U₀_out
 #%%
 v_inlet_bc = OpenBoundaryCondition(v_inflow_profile; scheme=PerturbationAdvection())
 b_inlet_bc = ValueBoundaryCondition(b_inflow_profile)
-c_inlet_bc = ValueBoundaryCondition(c_inflow_profile)
+# c_inlet_bc = ValueBoundaryCondition(c_inflow_profile)
 
 u_west_outlet_bc = OpenBoundaryCondition(u_outlet; scheme=PerturbationAdvection())
 
@@ -217,9 +217,17 @@ u_bcs = FieldBoundaryConditions(immersed=immersed_u_bc, bottom=u_quadratic_botto
 v_bcs = FieldBoundaryConditions(immersed=immersed_v_bc, bottom=v_quadratic_bottom_drag_bc, north=v_inlet_bc)
 w_bcs = FieldBoundaryConditions(north=no_slip_bc)
 b_bcs = FieldBoundaryConditions(north=b_inlet_bc)
-c_bcs = FieldBoundaryConditions(north=c_inlet_bc)
+# c_bcs = FieldBoundaryConditions(north=c_inlet_bc)
 
-boundary_conditions = (u = u_bcs, v = v_bcs, w = w_bcs, b = b_bcs, c = c_bcs)
+# boundary_conditions = (u = u_bcs, v = v_bcs, w = w_bcs, b = b_bcs, c = c_bcs)
+boundary_conditions = (u = u_bcs, v = v_bcs, w = w_bcs, b = b_bcs)
+#%%
+@inline c_inlet(x, y, z) = ifelse(y <= 0, 1, 0)
+inlet_mask = GaussianMask{:y}(center=y₀, width=abs(y₀) / 10)
+c_restoring_rate = abs(U₀) / Δy / 10
+c_forcing = Relaxation(rate=c_restoring_rate, mask=inlet_mask, target=c_inlet)
+
+forcing = c_forcing
 #%%
 pressure_solver = ConjugateGradientPoissonSolver(grid)
 pressure_solver_str = "CG"
@@ -229,7 +237,7 @@ pressure_solver_str = "CG"
 coriolis = FPlane(; f= f₀)
 #%%
 simulation_length = 14
-filename = "dense_overflow_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)_nu4h_$(ν₄h)_nu4z_$(ν₄z)_$(simulation_length)days"
+filename = "dense_overflow_c_forcing_Nx_$(Nx)_Ny_$(Ny)_Nz_$(Nz)_$(pressure_solver_str)_nu4h_$(ν₄h)_nu4z_$(ν₄z)_$(simulation_length)days"
 
 FILE_DIR = "./Data/$(filename)"
 mkpath(FILE_DIR)
@@ -244,7 +252,8 @@ model = NonhydrostaticModel(grid; pressure_solver,
                             coriolis,
                             closure,
                             buoyancy = BuoyancyTracer(),
-                            boundary_conditions)
+                            boundary_conditions,
+                            forcing)
 #%%
 @inline b_background(x, y, z, t) = b₀ + N^2 * z
 bᵢ(x, y, z) = b_background(x, y, z, nothing) + rand() * 1e-5 * abs(N^2 * Lz)
@@ -309,16 +318,16 @@ function progress(sim)
     return nothing
 end
 
-simulation.callbacks[:progress] = Callback(progress, IterationInterval(1))
+simulation.callbacks[:progress] = Callback(progress, IterationInterval(100))
 
 simulation.output_writers[:jld2] = JLD2Writer(model, (; u, v, w, b, c);
                                               filename = "$(FILE_DIR)/instantaneous_fields.jld2",
-                                              schedule = TimeInterval(1day),
+                                              schedule = TimeInterval(0.5days),
                                               with_halos = true)
 
 simulation.output_writers[:checkpoint] = Checkpointer(model;
                                                       dir = FILE_DIR,
-                                                      schedule = TimeInterval(1days))
+                                                      schedule = TimeInterval(0.5days))
 
 checkpoint_files = glob("checkpoint*.jld2", FILE_DIR)
 if !isempty(checkpoint_files)
