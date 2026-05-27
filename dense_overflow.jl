@@ -222,7 +222,7 @@ b_bcs = FieldBoundaryConditions(north=b_inlet_bc)
 # boundary_conditions = (u = u_bcs, v = v_bcs, w = w_bcs, b = b_bcs, c = c_bcs)
 boundary_conditions = (u = u_bcs, v = v_bcs, w = w_bcs, b = b_bcs)
 #%%
-@inline c_inlet(x, y, z) = ifelse(y <= 0, 1, 0)
+@inline c_inlet(x, y, z, t) = ifelse(y >= 0, 1, 0)
 inlet_mask = GaussianMask{:y}(center=y₀, width=abs(y₀) / 10)
 c_restoring_rate = abs(U₀) / Δy / 10
 c_forcing = Relaxation(rate=c_restoring_rate, mask=inlet_mask, target=c_inlet)
