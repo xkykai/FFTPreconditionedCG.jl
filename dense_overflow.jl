@@ -227,7 +227,7 @@ inlet_mask = GaussianMask{:y}(center=y₀, width=abs(y₀) / 10)
 c_restoring_rate = abs(U₀) / Δy / 10
 c_forcing = Relaxation(rate=c_restoring_rate, mask=inlet_mask, target=c_inlet)
 
-forcing = c_forcing
+forcing = (; c = c_forcing)
 #%%
 pressure_solver = ConjugateGradientPoissonSolver(grid)
 pressure_solver_str = "CG"
