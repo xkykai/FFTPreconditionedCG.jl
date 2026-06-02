@@ -15,6 +15,22 @@ using Statistics
 using CUDA
 using NaNStatistics
 using Glob
+using ArgParse
+
+function parse_commandline()
+    s = ArgParseSettings()
+    @add_arg_table! s begin
+        "--solver"
+            help = "Pressure solver to use: CG (ConjugateGradientPoissonSolver) or FFT (FFTBasedPoissonSolver)"
+            arg_type = String
+            default = "CG"
+    end
+    return parse_args(s)
+end
+
+args = parse_commandline()
+const SOLVER = uppercase(args["solver"])
+SOLVER in ("CG", "FFT") || error("Invalid --solver $(SOLVER); must be CG or FFT")
 
 arch = GPU()
 # arch = CPU()
@@ -229,10 +245,13 @@ c_forcing = Relaxation(rate=c_restoring_rate, mask=inlet_mask, target=c_inlet)
 
 forcing = (; c = c_forcing)
 #%%
-pressure_solver = ConjugateGradientPoissonSolver(grid)
-pressure_solver_str = "CG"
-# pressure_solver = nothing
-# pressure_solver_str = "FFT"
+if SOLVER == "CG"
+    pressure_solver = ConjugateGradientPoissonSolver(grid)
+    pressure_solver_str = "CG"
+else # SOLVER == "FFT"
+    pressure_solver = nothing
+    pressure_solver_str = "FFT"
+end
 #%%
 coriolis = FPlane(; f= f₀)
 #%%
