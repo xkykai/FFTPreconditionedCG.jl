@@ -33,20 +33,15 @@ const SOLVER = uppercase(args["solver"])
 SOLVER in ("CG", "FFT") || error("Invalid --solver $(SOLVER); must be CG or FFT")
 
 arch = GPU()
-# arch = CPU()
 
 const Nx = 1536
 const Ny = 640
 const Nz = 128
-# const Nx = 128
-# const Ny = 64
-# const Nz = 128
+
 const Δx = 500
 const Δy = 500
 const Δz = 30
-# const Δx = 5000
-# const Δy = 5000
-# const Δz = 30
+
 const Lx = Nx * Δx
 const Ly = Ny * Δy
 const Lz = Nz * Δz
@@ -69,6 +64,7 @@ const tanα = 0.01
 const h₀ = 300
 const Lρ = sqrt(Δb₀ * h₀) / f₀
 const Cd = 2e-3
+
 # Biharmonic coefficients sized so the 2Δ (Nyquist) wave decays on τ_2Δ ≈ 100 s
 # (a few Δt at Δt ≈ 30s). Inverting τ_2Δ = Δ⁴ / (π⁴ · ν₄) gives ν₄ = Δ⁴ / (π⁴ · τ_2Δ),
 # which sits ~40–50× below the explicit stability limit ν₄ < Δ⁴ / (8 · Δt).
@@ -239,7 +235,7 @@ b_bcs = FieldBoundaryConditions(north=b_inlet_bc)
 boundary_conditions = (u = u_bcs, v = v_bcs, w = w_bcs, b = b_bcs)
 #%%
 @inline c_inlet(x, y, z, t) = ifelse(y >= 0, 1, 0)
-inlet_mask = GaussianMask{:y}(center=y₀, width=abs(y₀) / 10)
+inlet_mask = GaussianMask{:y}(center=y₁, width= y₁/10)
 c_restoring_rate = abs(U₀) / Δy / 10
 c_forcing = Relaxation(rate=c_restoring_rate, mask=inlet_mask, target=c_inlet)
 
