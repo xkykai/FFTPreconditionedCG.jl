@@ -1,15 +1,15 @@
 using MPI
 using Oceananigans
-using Printf
 using JLD2
-using Oceananigans.Models.NonhydrostaticModels: ConjugateGradientPoissonSolver, FFTBasedPoissonSolver
 using Oceananigans.Models.NonhydrostaticModels: nonhydrostatic_pressure_solver
-using Oceananigans.Solvers: DiagonallyDominantPreconditioner
+using Oceananigans.Solvers: ConjugateGradientPoissonSolver, DiagonallyDominantPreconditioner
 using Oceananigans.Grids: with_number_type
 using Oceananigans.DistributedComputations
-using Statistics
 using CUDA
+using Random
 using ArgParse
+
+include("benchmark_utils.jl")
 
 MPI.Init()
 
@@ -76,7 +76,6 @@ function setup_grid()
                            z = (0, Lz),
                            topology = (Bounded, Bounded, Bounded))
 
-    slope(x, y) = 0.35
 
     Nr_x = 8 * ngpus # number of roughness elements in x-direction
     Nr_y = 8 # number of roughness elements in y-direction
@@ -112,6 +111,7 @@ function setup_grid()
 end
 
 function initial_conditions!(model)
+    Random.seed!(1234 + local_rank)
     bᵢ(x, y, z) = rand() * 1e-2 - z + 0.5
 
     set!(model, b=bᵢ)
@@ -133,7 +133,7 @@ function setup_model(grid, pressure_solver)
     b_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(-1/2), bottom=ValueBoundaryCondition(1/2),
                                     immersed=ValueBoundaryCondition(rayleigh_benard_buoyancy))
 
-    model = NonhydrostaticModel(; grid, pressure_solver,
+    model = NonhydrostaticModel(grid; pressure_solver,
                                   advection = WENO(order=9),
                                   closure = closure,
                                   tracers = :b,
@@ -144,85 +144,53 @@ function setup_model(grid, pressure_solver)
     return model
 end
 
-Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
+function build_solver(grid, name)
+    name == "FFT" && return nothing
 
-@info "Benchmarking FFT solver"
-grid = setup_grid()
-
-warmup_nsteps = 50
-nsteps = 50
-
-@info "Benchmarking FFT solver"
-grid = setup_grid()
-pressure_solver = nothing
-model = setup_model(grid, pressure_solver)
-times_FFT = []
-
-for step in 1:warmup_nsteps
-    time_step!(model, Δt)
-end
-
-for step in 1:nsteps
-    t = @timed time_step!(model, Δt)
-    push!(times_FFT, t)
-end
-
-local_rank = ngpus == 1 ? 0 : model.architecture.local_rank
-OUTPUT_DIR = "./reports/weakscaling_H100_timed_nogc/benchmark_$(ngpus)gpu"
-
-mkpath(OUTPUT_DIR)
-FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank)_timed.jld2")
-jldopen(FILE_PATH, "w") do file
-    file["times/FFTstep"] = times_FFT
-end
-
-preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
-
-for precond_name in preconditioners
-    @info "Benchmarking $precond_name preconditioner"
-    global grid = nothing
-    global model = nothing
-    global pressure_solver = nothing
-    global preconditioner = nothing
-    GC.gc()
-    CUDA.reclaim()
-
-    grid = setup_grid()
-    if precond_name == "no"
-        preconditioner = nothing
-    elseif precond_name == "FFT64"
-        preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
-    elseif precond_name == "FFT32"
-        reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
-        preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
-    elseif precond_name == "MITgcm"
-        preconditioner = DiagonallyDominantPreconditioner()
+    preconditioner = if name == "no"
+        nothing
+    elseif name == "FFT64"
+        nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
+    elseif name == "FFT32"
+        nonhydrostatic_pressure_solver(arch, with_number_type(Float32, grid.underlying_grid), nothing)
+    elseif name == "MITgcm"
+        DiagonallyDominantPreconditioner()
     end
 
     volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
-
     reltol = 100 * eps(grid) * volume^2
     abstol = 100 * eps(grid)
 
-    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
+    return ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
+end
 
-    model = setup_model(grid, pressure_solver)
+Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
 
-    for step in 1:warmup_nsteps
-        time_step!(model, Δt)
-    end
+solver_names = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
 
-    cg_iters = Int[]
-    times = []
+warmup_nsteps = 10
+nsteps = 40
+nrepeats = 3
 
-    for step in 1:nsteps
-        t = @timed time_step!(model, Δt)
-        push!(times, t)
-        push!(cg_iters, model.pressure_solver.conjugate_gradient_solver.iteration)
-    end
+local_rank = MPI.Comm_rank(MPI.COMM_WORLD)
+OUTPUT_DIR = "./reports/weakscaling_H100/benchmark_$(ngpus)gpu"
+mkpath(OUTPUT_DIR)
+FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank).jld2")
+
+for repeat in 1:nrepeats, solver_name in solver_names
+    @info "Benchmarking $solver_name on rank $local_rank, repeat $repeat"
+
+    grid = setup_grid()
+    model = setup_model(grid, build_solver(grid, solver_name))
+
+    results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
 
     jldopen(FILE_PATH, "a") do file
-        file["times/$(precond_name)"] = times
-        file["cg_iters/$(precond_name)"] = cg_iters
+        file["$(solver_name)/$(repeat)"] = results
     end
+
+    grid = nothing
+    model = nothing
+    GC.gc()
+    CUDA.reclaim()
 end
