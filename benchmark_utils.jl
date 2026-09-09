@@ -23,9 +23,9 @@ Time `nsteps` calls to `time_step!`, returning per-step host `wall` time and dev
 `device` time in seconds, the pressure solver `iterations` per step, and the `elapsed`
 time of the whole loop measured between rank barriers.
 
-`wall - device` is host time not overlapped with the GPU: kernel launches, MPI waits and
-allocation. `elapsed / nsteps` is the mean step time, which memory pool stalls inflate well
-above `median(wall)`.
+`device` is the interval between two CUDA events bracketing the step, so it counts GPU idle
+caused by host stalls and tracks `wall` to within the event overhead. `elapsed / nsteps` is
+the mean step time, which memory pool stalls inflate well above `median(wall)`.
 """
 function benchmark_time_steps!(model, Δt, nsteps; warmup = nsteps)
     comm = communicator(model.architecture)
