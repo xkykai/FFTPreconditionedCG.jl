@@ -6,7 +6,7 @@ using Makie
 filepath = "./reports/single_H100_timed_nogc.jld2"
 
 Ns = [32, 64, 96, 128, 192, 256, 384, 512]
-nrepeats = 3
+nrepeats = 2
 
 file = jldopen(filepath, "r")
 

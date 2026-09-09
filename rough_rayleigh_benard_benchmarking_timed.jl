@@ -153,24 +153,29 @@ isfile(FILE_PATH) && rm(FILE_PATH)
 
 warmup_nsteps = 50
 nsteps = 50
-nrepeats = 3
+nrepeats = 2
 
 preconditioners = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
 
-for (N, Δt) in zip(Ns, Δts), repeat in 1:nrepeats, precond_name in preconditioners
-    @info "Benchmarking $precond_name for N=$N, repeat $repeat"
+for (N, Δt) in zip(Ns, Δts), repeat in 1:nrepeats
+    # Alternating order cancels drift in GPU throughput over the sweep
+    order = isodd(repeat) ? preconditioners : reverse(preconditioners)
 
-    grid = setup_grid(N)
-    model = setup_model(grid, build_solver(grid, precond_name))
+    for precond_name in order
+        @info "Benchmarking $precond_name for N=$N, repeat $repeat"
 
-    results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
+        grid = setup_grid(N)
+        model = setup_model(grid, build_solver(grid, precond_name))
 
-    jldopen(FILE_PATH, "a") do file
-        file["$(N)/$(precond_name)/$(repeat)"] = results
+        results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
+
+        jldopen(FILE_PATH, "a") do file
+            file["$(N)/$(precond_name)/$(repeat)"] = results
+        end
+
+        grid = nothing
+        model = nothing
+        GC.gc()
+        CUDA.reclaim()
     end
-
-    grid = nothing
-    model = nothing
-    GC.gc()
-    CUDA.reclaim()
 end
