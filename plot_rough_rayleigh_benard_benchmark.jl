@@ -3,52 +3,53 @@ using Statistics
 using CairoMakie
 using Makie
 
-filepath = "./reports/single_H100.jld2"
+filepath = "./reports/single_H100_timed_nogc.jld2"
 
 Ns = [32, 64, 96, 128, 192, 256, 384, 512]
-
-solver_names = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
-
-labels = Dict("FFT" => "FFT Only",
-              "no" => "No Preconditioner",
-              "FFT64" => "FFT64 Preconditioner",
-              "FFT32" => "FFT32 Preconditioner",
-              "MITgcm" => "MITgcm Preconditioner")
-
 nrepeats = 3
-
-median_wall = Dict{String, Vector{Float64}}()
-median_iters = Dict{String, Vector{Float64}}()
 
 file = jldopen(filepath, "r")
 
-for name in solver_names
-    median_wall[name] = zeros(length(Ns))
-    median_iters[name] = zeros(length(Ns))
+precond_names = ["no", "FFT64", "FFT32", "MITgcm"]
+
+median_times = Dict{String, Vector{Float64}}()
+median_cg_iters = Dict{String, Vector{Float64}}()
+
+for name in precond_names
+    median_times[name] = zeros(length(Ns))
+    median_cg_iters[name] = zeros(length(Ns))
     for (i, N) in enumerate(Ns)
         results = [file["$(N)/$(name)/$(r)"] for r in 1:nrepeats]
-        median_wall[name][i] = median(vcat((r.wall for r in results)...))
-        median_iters[name][i] = median(vcat((r.iterations for r in results)...))
+        median_times[name][i] = median(vcat((r.wall for r in results)...))
+        median_cg_iters[name][i] = median(vcat((r.iterations for r in results)...))
     end
 end
 
-close(file)
+median_times["FFT_only"] = zeros(length(Ns))
+for (i, N) in enumerate(Ns)
+    results = [file["$(N)/FFT/$(r)"] for r in 1:nrepeats]
+    median_times["FFT_only"][i] = median(vcat((r.wall for r in results)...))
+end
 
 #%%
 colors = Makie.wong_colors();
 linewidth = 3
 fig = Figure(size=(1000, 500), fontsize=15)
-axtime = Axis(fig[1, 1], xlabel="N", ylabel="Median Time per Timestep (s)", yscale=log10, xscale=log2)
-axiters = Axis(fig[1, 2], xlabel="N", ylabel="Median CG Iterations per Timestep", yscale=log10, xscale=log2)
+axtime = Axis(fig[1, 1], xlabel="N³", ylabel="Median Time per Timestep (s)", yscale = log10, xscale=log2)
+axiters = Axis(fig[1, 2], xlabel="N³", ylabel="Median CG Iterations per Timestep", yscale = log10, xscale=log2)
+lines!(axtime, Ns, median_times["no"], label="No Preconditioner", linewidth=linewidth, color=colors[1])
+lines!(axtime, Ns, median_times["FFT64"], label="FFT64 Preconditioner", linewidth=linewidth, color=colors[2])
+lines!(axtime, Ns, median_times["FFT32"], label="FFT32 Preconditioner", linewidth=linewidth, color=colors[3])
+lines!(axtime, Ns, median_times["MITgcm"], label="MITgcm Preconditioner", linewidth=linewidth, color=colors[4])
+lines!(axtime, Ns, median_times["FFT_only"], label="FFT Only", linewidth=linewidth, color=colors[5])
 
-for (c, name) in enumerate(solver_names)
-    lines!(axtime, Ns, median_wall[name], label=labels[name], linewidth=linewidth, color=colors[c])
-    name == "FFT" && continue
-    lines!(axiters, Ns, median_iters[name], label=labels[name], linewidth=linewidth, color=colors[c])
-end
+lines!(axiters, Ns, median_cg_iters["no"], label="No Preconditioner", linewidth=linewidth, color=colors[1])
+lines!(axiters, Ns, median_cg_iters["FFT64"], label="FFT64 Preconditioner", linewidth=linewidth, color=colors[2])
+lines!(axiters, Ns, median_cg_iters["FFT32"], label="FFT32 Preconditioner", linewidth=linewidth, color=colors[3])
+lines!(axiters, Ns, median_cg_iters["MITgcm"], label="MITgcm Preconditioner", linewidth=linewidth, color=colors[4])
 
 Legend(fig[2, :], axtime, orientation=:horizontal)
 
 display(fig)
-save("./Output/benchmark_rough_rayleigh_benard_single_H100.png", fig, px_per_unit=4)
+save("./Output/benchmark_rough_rayleigh_benard_single_H100_nogc.png", fig, px_per_unit=4)
 #%%

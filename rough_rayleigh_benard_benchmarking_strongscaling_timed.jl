@@ -1,13 +1,16 @@
 using MPI
 using Oceananigans
+using Printf
 using JLD2
+using Oceananigans.Models.NonhydrostaticModels: ConjugateGradientPoissonSolver, FFTBasedPoissonSolver
 using Oceananigans.Models.NonhydrostaticModels: nonhydrostatic_pressure_solver
-using Oceananigans.Solvers: ConjugateGradientPoissonSolver, DiagonallyDominantPreconditioner
+using Oceananigans.Solvers: DiagonallyDominantPreconditioner
 using Oceananigans.Grids: with_number_type
 using Oceananigans.DistributedComputations
+using Statistics
 using CUDA
-using Random
 using ArgParse
+using Random
 
 include("benchmark_utils.jl")
 
@@ -73,6 +76,7 @@ function setup_grid()
                            z = (0, Lz),
                            topology = (Bounded, Bounded, Bounded))
 
+    slope(x, y) = 0.35
 
     Nr = 8 # number of roughness elements
     hx = Lx / Nr / 2
@@ -139,20 +143,22 @@ function setup_model(grid, pressure_solver)
     return model
 end
 
-function build_solver(grid, name)
-    name == "FFT" && return nothing
+function build_solver(grid, precond_name)
+    precond_name == "FFT" && return nothing
 
-    preconditioner = if name == "no"
-        nothing
-    elseif name == "FFT64"
-        nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
-    elseif name == "FFT32"
-        nonhydrostatic_pressure_solver(arch, with_number_type(Float32, grid.underlying_grid), nothing)
-    elseif name == "MITgcm"
-        DiagonallyDominantPreconditioner()
+    if precond_name == "no"
+        preconditioner = nothing
+    elseif precond_name == "FFT64"
+        preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
+    elseif precond_name == "FFT32"
+        reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
+        preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
+    elseif precond_name == "MITgcm"
+        preconditioner = DiagonallyDominantPreconditioner()
     end
 
     volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
+
     reltol = 100 * eps(grid) * volume^2
     abstol = 100 * eps(grid)
 
@@ -161,28 +167,29 @@ end
 
 Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
 
-solver_names = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
-
-warmup_nsteps = 10
-nsteps = 40
+warmup_nsteps = 50
+nsteps = 50
 nrepeats = 3
 
+preconditioners = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
+
 local_rank = MPI.Comm_rank(MPI.COMM_WORLD)
-OUTPUT_DIR = "./reports/strongscaling_H100/benchmark_$(ngpus)gpu"
+OUTPUT_DIR = "./reports/strongscaling_H100_timed_nogc/benchmark_$(ngpus)gpu"
+
 mkpath(OUTPUT_DIR)
-FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank).jld2")
+FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank)_timed.jld2")
 isfile(FILE_PATH) && rm(FILE_PATH)
 
-for repeat in 1:nrepeats, solver_name in solver_names
-    @info "Benchmarking $solver_name on rank $local_rank, repeat $repeat"
+for repeat in 1:nrepeats, precond_name in preconditioners
+    @info "Benchmarking $precond_name on rank $local_rank, repeat $repeat"
 
     grid = setup_grid()
-    model = setup_model(grid, build_solver(grid, solver_name))
+    model = setup_model(grid, build_solver(grid, precond_name))
 
     results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
 
     jldopen(FILE_PATH, "a") do file
-        file["$(solver_name)/$(repeat)"] = results
+        file["$(precond_name)/$(repeat)"] = results
     end
 
     grid = nothing

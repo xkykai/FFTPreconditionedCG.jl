@@ -1,9 +1,15 @@
 using Oceananigans
+using Printf
 using JLD2
+using Oceananigans.Models.NonhydrostaticModels: ConjugateGradientPoissonSolver, FFTBasedPoissonSolver
 using Oceananigans.Models.NonhydrostaticModels: nonhydrostatic_pressure_solver
-using Oceananigans.Solvers: ConjugateGradientPoissonSolver, DiagonallyDominantPreconditioner
+using Oceananigans.Solvers: DiagonallyDominantPreconditioner
 using Oceananigans.Grids: with_number_type
+using Oceananigans.DistributedComputations
+using Statistics
 using CUDA
+using NVTX
+using BenchmarkTools
 using Random
 
 include("benchmark_utils.jl")
@@ -48,6 +54,7 @@ function setup_grid(N)
                            z = (0, Lz),
                            topology = (Bounded, Bounded, Bounded))
 
+    slope(x, y) = 0.35
 
     Nr = 8 # number of roughness elements
     hx = Lx / Nr / 2
@@ -114,20 +121,22 @@ function setup_model(grid, pressure_solver)
     return model
 end
 
-function build_solver(grid, name)
-    name == "FFT" && return nothing
+function build_solver(grid, precond_name)
+    precond_name == "FFT" && return nothing
 
-    preconditioner = if name == "no"
-        nothing
-    elseif name == "FFT64"
-        nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
-    elseif name == "FFT32"
-        nonhydrostatic_pressure_solver(arch, with_number_type(Float32, grid.underlying_grid), nothing)
-    elseif name == "MITgcm"
-        DiagonallyDominantPreconditioner()
+    if precond_name == "no"
+        preconditioner = nothing
+    elseif precond_name == "FFT64"
+        preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
+    elseif precond_name == "FFT32"
+        reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
+        preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
+    elseif precond_name == "MITgcm"
+        preconditioner = DiagonallyDominantPreconditioner()
     end
 
     volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
+
     reltol = 100 * eps(grid) * volume^2
     abstol = 100 * eps(grid)
 
@@ -137,26 +146,27 @@ end
 Ns = [32, 64, 96, 128, 192, 256, 384, 512]
 Δts = [min(1 / N, (1/N^2) / max(ν, κ)) / 3 for N in Ns]
 
-solver_names = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
+mkpath("./reports/")
+filename = "single_H100_timed_nogc.jld2"
+FILE_PATH = joinpath("./reports/", filename)
+isfile(FILE_PATH) && rm(FILE_PATH)
 
 warmup_nsteps = 50
 nsteps = 50
 nrepeats = 3
 
-FILE_PATH = "./reports/single_H100.jld2"
-mkpath(dirname(FILE_PATH))
-isfile(FILE_PATH) && rm(FILE_PATH)
+preconditioners = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
 
-for (N, Δt) in zip(Ns, Δts), repeat in 1:nrepeats, solver_name in solver_names
-    @info "Benchmarking $solver_name at N=$N, repeat $repeat"
+for (N, Δt) in zip(Ns, Δts), repeat in 1:nrepeats, precond_name in preconditioners
+    @info "Benchmarking $precond_name for N=$N, repeat $repeat"
 
     grid = setup_grid(N)
-    model = setup_model(grid, build_solver(grid, solver_name))
+    model = setup_model(grid, build_solver(grid, precond_name))
 
     results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
 
     jldopen(FILE_PATH, "a") do file
-        file["$(N)/$(solver_name)/$(repeat)"] = results
+        file["$(N)/$(precond_name)/$(repeat)"] = results
     end
 
     grid = nothing
