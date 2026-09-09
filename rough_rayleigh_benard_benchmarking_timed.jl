@@ -145,6 +145,7 @@ nrepeats = 3
 
 FILE_PATH = "./reports/single_H100.jld2"
 mkpath(dirname(FILE_PATH))
+isfile(FILE_PATH) && rm(FILE_PATH)
 
 for (N, Δt) in zip(Ns, Δts), repeat in 1:nrepeats, solver_name in solver_names
     @info "Benchmarking $solver_name at N=$N, repeat $repeat"

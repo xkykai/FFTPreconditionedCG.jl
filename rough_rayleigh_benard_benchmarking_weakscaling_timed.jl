@@ -176,6 +176,7 @@ local_rank = MPI.Comm_rank(MPI.COMM_WORLD)
 OUTPUT_DIR = "./reports/weakscaling_H100/benchmark_$(ngpus)gpu"
 mkpath(OUTPUT_DIR)
 FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank).jld2")
+isfile(FILE_PATH) && rm(FILE_PATH)
 
 for repeat in 1:nrepeats, solver_name in solver_names
     @info "Benchmarking $solver_name on rank $local_rank, repeat $repeat"
