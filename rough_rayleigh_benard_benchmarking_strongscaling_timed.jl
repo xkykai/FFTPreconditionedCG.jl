@@ -31,7 +31,10 @@ end
 args = parse_commandline()
 ngpus = args["ngpus"]
 
-if MPI.Comm_size(MPI.COMM_WORLD) == 1
+MPI.Comm_size(MPI.COMM_WORLD) == ngpus ||
+    error("launched with $(MPI.Comm_size(MPI.COMM_WORLD)) ranks but --ngpus is $ngpus")
+
+if ngpus == 1
     arch = GPU()
 else
     arch = Distributed(GPU(); partition = Partition(x = DistributedComputations.Equal()), synchronized_communication=false)

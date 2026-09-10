@@ -12,7 +12,7 @@ using CUDA
 using ArgParse
 using Random
 
-include("benchmark_utils.jl")
+include(joinpath(@__DIR__, "benchmark_utils.jl"))
 
 MPI.Init()
 
@@ -40,7 +40,7 @@ else
     arch = Distributed(GPU(); partition = Partition(x = DistributedComputations.Equal()), synchronized_communication=false)
 end
 
-const N = 480
+const N = 64
 const Ra = 1e6
 const ν = κ = 1 / sqrt(Ra)
 
@@ -175,13 +175,13 @@ end
 
 Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
 
-warmup_nsteps = 50
-nsteps = 50
+warmup_nsteps = 3
+nsteps = 3
 
-preconditioners = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
+preconditioners = ["FFT", "FFT32"]
 
 local_rank = MPI.Comm_rank(MPI.COMM_WORLD)
-OUTPUT_DIR = "./reports/weakscaling_H100_timed_nogc/benchmark_$(ngpus)gpu"
+OUTPUT_DIR = joinpath(@__DIR__, "proto_reports/benchmark_$(ngpus)gpu")
 
 mkpath(OUTPUT_DIR)
 FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank)_timed.jld2")
