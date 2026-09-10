@@ -10,6 +10,9 @@ using Oceananigans.DistributedComputations
 using Statistics
 using CUDA
 using ArgParse
+using Random
+
+include("benchmark_utils.jl")
 
 MPI.Init()
 
@@ -112,6 +115,7 @@ function setup_grid()
 end
 
 function initial_conditions!(model)
+    Random.seed!(1234 + local_rank)
     bᵢ(x, y, z) = rand() * 1e-2 - z + 0.5
 
     set!(model, b=bᵢ)
@@ -133,7 +137,7 @@ function setup_model(grid, pressure_solver)
     b_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(-1/2), bottom=ValueBoundaryCondition(1/2),
                                     immersed=ValueBoundaryCondition(rayleigh_benard_buoyancy))
 
-    model = NonhydrostaticModel(; grid, pressure_solver,
+    model = NonhydrostaticModel(grid; pressure_solver,
                                   advection = WENO(order=9),
                                   closure = closure,
                                   tracers = :b,
@@ -144,50 +148,9 @@ function setup_model(grid, pressure_solver)
     return model
 end
 
-Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
+function build_solver(grid, precond_name)
+    precond_name == "FFT" && return nothing
 
-@info "Benchmarking FFT solver"
-grid = setup_grid()
-
-warmup_nsteps = 50
-nsteps = 50
-
-@info "Benchmarking FFT solver"
-grid = setup_grid()
-pressure_solver = nothing
-model = setup_model(grid, pressure_solver)
-times_FFT = []
-
-for step in 1:warmup_nsteps
-    time_step!(model, Δt)
-end
-
-for step in 1:nsteps
-    t = @timed time_step!(model, Δt)
-    push!(times_FFT, t)
-end
-
-local_rank = ngpus == 1 ? 0 : model.architecture.local_rank
-OUTPUT_DIR = "./reports/weakscaling_H100_timed_nogc/benchmark_$(ngpus)gpu"
-
-mkpath(OUTPUT_DIR)
-FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank)_timed.jld2")
-jldopen(FILE_PATH, "w") do file
-    file["times/FFTstep"] = times_FFT
-end
-
-preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
-
-for precond_name in preconditioners
-    @info "Benchmarking $precond_name preconditioner"
-    global grid = nothing
-    global model = nothing
-    global pressure_solver = nothing
-    global preconditioner = nothing
-    GC.gc()
-    CUDA.reclaim()
-
-    grid = setup_grid()
     if precond_name == "no"
         preconditioner = nothing
     elseif precond_name == "FFT64"
@@ -204,25 +167,41 @@ for precond_name in preconditioners
     reltol = 100 * eps(grid) * volume^2
     abstol = 100 * eps(grid)
 
-    pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
+    return ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
+end
 
-    model = setup_model(grid, pressure_solver)
+Δt = min(1 / N, (1/N^2) / max(ν, κ)) / 3
 
-    for step in 1:warmup_nsteps
-        time_step!(model, Δt)
-    end
+warmup_nsteps = 50
+nsteps = 50
 
-    cg_iters = Int[]
-    times = []
+preconditioners = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
 
-    for step in 1:nsteps
-        t = @timed time_step!(model, Δt)
-        push!(times, t)
-        push!(cg_iters, model.pressure_solver.conjugate_gradient_solver.iteration)
-    end
+local_rank = MPI.Comm_rank(MPI.COMM_WORLD)
+OUTPUT_DIR = "./reports/weakscaling_H100_timed_nogc/benchmark_$(ngpus)gpu"
+
+mkpath(OUTPUT_DIR)
+FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank)_timed.jld2")
+isfile(FILE_PATH) && rm(FILE_PATH)
+
+for precond_name in preconditioners
+    @info "Benchmarking $precond_name on rank $local_rank"
+
+    grid = setup_grid()
+    model = setup_model(grid, build_solver(grid, precond_name))
+
+    results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
 
     jldopen(FILE_PATH, "a") do file
-        file["times/$(precond_name)"] = times
-        file["cg_iters/$(precond_name)"] = cg_iters
+        file["times/$(precond_name)"] = results.stats
+        file["cg_iters/$(precond_name)"] = results.iterations
+        file["gpu_state/$(precond_name)"] = (initial = results.initial_state,
+                                             final = results.final_state,
+                                             elapsed = results.elapsed)
     end
+
+    grid = nothing
+    model = nothing
+    GC.gc()
+    CUDA.reclaim()
 end

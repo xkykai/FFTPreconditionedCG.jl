@@ -10,6 +10,9 @@ using Statistics
 using CUDA
 using NVTX
 using BenchmarkTools
+using Random
+
+include("benchmark_utils.jl")
 
 arch = GPU()
 
@@ -85,6 +88,7 @@ function setup_grid(N)
 end
 
 function initial_conditions!(model)
+    Random.seed!(1234)
     bᵢ(x, y, z) = rand() * 1e-2 - z + 0.5
 
     set!(model, b=bᵢ)
@@ -106,7 +110,7 @@ function setup_model(grid, pressure_solver)
     b_bcs = FieldBoundaryConditions(top=ValueBoundaryCondition(-1/2), bottom=ValueBoundaryCondition(1/2),
                                     immersed=ValueBoundaryCondition(rayleigh_benard_buoyancy))
 
-    model = NonhydrostaticModel(; grid, pressure_solver,
+    model = NonhydrostaticModel(grid; pressure_solver,
                                   advection = WENO(order=9),
                                   closure = closure,
                                   tracers = :b,
@@ -117,84 +121,59 @@ function setup_model(grid, pressure_solver)
     return model
 end
 
+function build_solver(grid, precond_name)
+    precond_name == "FFT" && return nothing
+
+    if precond_name == "no"
+        preconditioner = nothing
+    elseif precond_name == "FFT64"
+        preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
+    elseif precond_name == "FFT32"
+        reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
+        preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
+    elseif precond_name == "MITgcm"
+        preconditioner = DiagonallyDominantPreconditioner()
+    end
+
+    volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
+
+    reltol = 100 * eps(grid) * volume^2
+    abstol = 100 * eps(grid)
+
+    return ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
+end
+
 Ns = [32, 64, 96, 128, 192, 256, 384, 512]
 Δts = [min(1 / N, (1/N^2) / max(ν, κ)) / 3 for N in Ns]
 
 mkpath("./reports/")
 filename = "single_H100_timed_nogc.jld2"
 FILE_PATH = joinpath("./reports/", filename)
+isfile(FILE_PATH) && rm(FILE_PATH)
 
 warmup_nsteps = 50
 nsteps = 50
 
-for (N, Δt) in zip(Ns, Δts)
-    @info "Benchmarking FFT solver for N=$N"
+preconditioners = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
+
+for (N, Δt) in zip(Ns, Δts), precond_name in preconditioners
+    @info "Benchmarking $precond_name for N=$N"
+
     grid = setup_grid(N)
-    pressure_solver = nothing
-    model = setup_model(grid, pressure_solver)
-    times_FFT = []
+    model = setup_model(grid, build_solver(grid, precond_name))
 
-    for step in 1:warmup_nsteps
-        time_step!(model, Δt)
-    end
-
-    for step in 1:nsteps
-        t = @timed time_step!(model, Δt)
-        push!(times_FFT, t)
-    end
+    results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
 
     jldopen(FILE_PATH, "a") do file
-        file["$(N)/times/FFTstep"] = times_FFT
+        file["$(N)/times/$(precond_name)"] = results.stats
+        file["$(N)/cg_iters/$(precond_name)"] = results.iterations
+        file["$(N)/gpu_state/$(precond_name)"] = (initial = results.initial_state,
+                                                  final = results.final_state,
+                                                  elapsed = results.elapsed)
     end
-    
-    preconditioners = ["no", "FFT64", "FFT32", "MITgcm"]
 
-    for precond_name in preconditioners
-        @info "Benchmarking $precond_name preconditioner for N=$N"
-        grid = nothing
-        model = nothing
-        pressure_solver = nothing
-        preconditioner = nothing
-        GC.gc()
-        CUDA.reclaim()
-
-        grid = setup_grid(N)
-        if precond_name == "no"
-            preconditioner = nothing
-        elseif precond_name == "FFT64"
-            preconditioner = nonhydrostatic_pressure_solver(arch, grid.underlying_grid, nothing)
-        elseif precond_name == "FFT32"
-            reduced_precision_grid = with_number_type(Float32, grid.underlying_grid)
-            preconditioner = nonhydrostatic_pressure_solver(arch, reduced_precision_grid, nothing)
-        elseif precond_name == "MITgcm"
-            preconditioner = DiagonallyDominantPreconditioner()
-        end
-
-        volume = grid.Δxᶜᵃᵃ * grid.Δyᵃᶜᵃ * grid.z.Δᵃᵃᶜ
-
-        reltol = 100 * eps(grid) * volume^2
-        abstol = 100 * eps(grid)
-
-        pressure_solver = ConjugateGradientPoissonSolver(grid, maxiter=10000; reltol, abstol, preconditioner)
-
-        model = setup_model(grid, pressure_solver)
-
-        for step in 1:warmup_nsteps
-            time_step!(model, Δt)
-        end
-
-        cg_iters = Int[]
-        times = []
-
-        for step in 1:nsteps
-            t = @timed time_step!(model, Δt)
-            push!(times, t)
-            push!(cg_iters, model.pressure_solver.conjugate_gradient_solver.iteration)
-        end
-
-        jldopen(FILE_PATH, "a") do file
-            file["$(N)/times/$(precond_name)"] = times
-            file["$(N)/cg_iters/$(precond_name)"] = cg_iters
-        end
-    end
+    grid = nothing
+    model = nothing
+    GC.gc()
+    CUDA.reclaim()
 end

@@ -28,8 +28,8 @@ end
 
 median_times["FFT_only"] = zeros(length(Ns))
 for (i, N) in enumerate(Ns)
-    nsamples = length(file["$(N)/times/FFTstep"])
-    times = file["$(N)/times/FFTstep"]
+    nsamples = length(file["$(N)/times/FFT"])
+    times = file["$(N)/times/FFT"]
     median_times["FFT_only"][i] = median([t.time for t in times])
 end
 
