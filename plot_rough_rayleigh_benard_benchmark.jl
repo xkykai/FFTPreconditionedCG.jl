@@ -6,7 +6,6 @@ using Makie
 filepath = "./reports/single_H100_timed_nogc.jld2"
 
 Ns = [32, 64, 96, 128, 192, 256, 384, 512]
-nrepeats = 2
 
 file = jldopen(filepath, "r")
 
@@ -19,16 +18,16 @@ for name in precond_names
     median_times[name] = zeros(length(Ns))
     median_cg_iters[name] = zeros(length(Ns))
     for (i, N) in enumerate(Ns)
-        results = [file["$(N)/$(name)/$(r)"] for r in 1:nrepeats]
-        median_times[name][i] = median(vcat((r.wall for r in results)...))
-        median_cg_iters[name][i] = median(vcat((r.iterations for r in results)...))
+        results = file["$(N)/$(name)"]
+        median_times[name][i] = median(results.wall)
+        median_cg_iters[name][i] = median(results.iterations)
     end
 end
 
 median_times["FFT_only"] = zeros(length(Ns))
 for (i, N) in enumerate(Ns)
-    results = [file["$(N)/FFT/$(r)"] for r in 1:nrepeats]
-    median_times["FFT_only"][i] = median(vcat((r.wall for r in results)...))
+    results = file["$(N)/FFT"]
+    median_times["FFT_only"][i] = median(results.wall)
 end
 
 #%%
