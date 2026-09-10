@@ -165,7 +165,11 @@ for (N, Δt) in zip(Ns, Δts), precond_name in preconditioners
     results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
 
     jldopen(FILE_PATH, "a") do file
-        file["$(N)/$(precond_name)"] = results
+        file["$(N)/times/$(precond_name)"] = results.stats
+        file["$(N)/cg_iters/$(precond_name)"] = results.iterations
+        file["$(N)/gpu_state/$(precond_name)"] = (initial = results.initial_state,
+                                                  final = results.final_state,
+                                                  elapsed = results.elapsed)
     end
 
     grid = nothing

@@ -19,13 +19,12 @@ end
 """
     benchmark_time_steps!(model, Δt, nsteps; warmup)
 
-Time `nsteps` calls to `time_step!`, returning per-step `wall` time in seconds, the pressure
+Time `nsteps` calls to `time_step!`, returning the per-step `@timed` `stats`, the pressure
 solver `iterations` per step, and the `elapsed` time of the whole loop measured between rank
 barriers.
 
-Each step is synchronized before the host timestamp is taken, so `wall` is the time to
-complete the step rather than the time to queue it. `elapsed / nsteps` is the mean step time,
-which memory pool stalls inflate well above `median(wall)`.
+The GPU is synchronized inside the timed block, so `stats[n].time` is the time to complete
+the step rather than the time to queue it.
 """
 function benchmark_time_steps!(model, Δt, nsteps; warmup = nsteps)
     comm = communicator(model.architecture)
@@ -35,24 +34,25 @@ function benchmark_time_steps!(model, Δt, nsteps; warmup = nsteps)
         time_step!(model, Δt)
     end
 
-    wall = zeros(nsteps)
-    iterations = zeros(Int, nsteps)
+    stats = []
+    iterations = Int[]
 
     CUDA.synchronize()
     barrier()
     initial_state = gpu_state()
     t₀ = time_ns()
 
-    for n in 1:nsteps
-        tₙ = time_ns()
-        time_step!(model, Δt)
-        CUDA.synchronize()
-        wall[n] = (time_ns() - tₙ) * 1e-9
-        iterations[n] = solver_iterations(model.pressure_solver)
+    for _ in 1:nsteps
+        t = @timed begin
+            time_step!(model, Δt)
+            CUDA.synchronize()
+        end
+        push!(stats, t)
+        push!(iterations, solver_iterations(model.pressure_solver))
     end
 
     barrier()
     elapsed = (time_ns() - t₀) * 1e-9
 
-    return (; wall, iterations, elapsed, initial_state, final_state = gpu_state())
+    return (; stats, iterations, elapsed, initial_state, final_state = gpu_state())
 end

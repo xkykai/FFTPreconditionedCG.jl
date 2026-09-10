@@ -18,16 +18,19 @@ for name in precond_names
     median_times[name] = zeros(length(Ns))
     median_cg_iters[name] = zeros(length(Ns))
     for (i, N) in enumerate(Ns)
-        results = file["$(N)/$(name)"]
-        median_times[name][i] = median(results.wall)
-        median_cg_iters[name][i] = median(results.iterations)
+        nsamples = length(file["$(N)/times/$(name)"])
+        times = file["$(N)/times/$(name)"]
+        median_times[name][i] = median([t.time for t in times])
+        cg_iters = file["$(N)/cg_iters/$(name)"]
+        median_cg_iters[name][i] = median(cg_iters)
     end
 end
 
 median_times["FFT_only"] = zeros(length(Ns))
 for (i, N) in enumerate(Ns)
-    results = file["$(N)/FFT"]
-    median_times["FFT_only"][i] = median(results.wall)
+    nsamples = length(file["$(N)/times/FFT"])
+    times = file["$(N)/times/FFT"]
+    median_times["FFT_only"][i] = median([t.time for t in times])
 end
 
 #%%
