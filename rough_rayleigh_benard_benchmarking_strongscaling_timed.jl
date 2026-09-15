@@ -24,6 +24,9 @@ function parse_commandline()
         help = "Number of GPUs to use"
         arg_type = Int
         default = 1
+      "--preconditioners"
+        help = "Comma-separated list drawn from FFT, no, FFT64, FFT32, MITgcm"
+        default = "FFT,no,FFT64,FFT32,MITgcm"
     end
     return parse_args(s)
 end
@@ -170,14 +173,13 @@ end
 warmup_nsteps = 50
 nsteps = 50
 
-preconditioners = ["FFT", "no", "FFT64", "FFT32", "MITgcm"]
+preconditioners = split(args["preconditioners"], ',')
 
 local_rank = MPI.Comm_rank(MPI.COMM_WORLD)
 OUTPUT_DIR = "./reports/strongscaling_H100_timed_nogc/benchmark_$(ngpus)gpu"
 
 mkpath(OUTPUT_DIR)
 FILE_PATH = joinpath(OUTPUT_DIR, "rank_$(local_rank)_timed.jld2")
-isfile(FILE_PATH) && rm(FILE_PATH)
 
 for precond_name in preconditioners
     @info "Benchmarking $precond_name on rank $local_rank"
@@ -188,6 +190,9 @@ for precond_name in preconditioners
     results = benchmark_time_steps!(model, Δt, nsteps; warmup=warmup_nsteps)
 
     jldopen(FILE_PATH, "a") do file
+        for group in ("times", "cg_iters", "gpu_state")
+            haskey(file, "$group/$precond_name") && delete!(file, "$group/$precond_name")
+        end
         file["times/$(precond_name)"] = results.stats
         file["cg_iters/$(precond_name)"] = results.iterations
         file["gpu_state/$(precond_name)"] = (initial = results.initial_state,
